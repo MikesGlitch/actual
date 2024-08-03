@@ -6,6 +6,8 @@ Actual-*
 **/xcuserdata/*
 export-2020-01-10.csv
 
+
+
 # Secrets
 .secret-tokens
 
@@ -50,3 +52,6 @@ bundle.mobile.js.map
 
 # Local Netlify folder
 .netlify
+
+# Allow the exe for testing
+!Actual-windows.exe
