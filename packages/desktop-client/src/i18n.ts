@@ -2,7 +2,7 @@ import { initReactI18next } from 'react-i18next';
 
 import i18n from 'i18next';
 import resourcesToBackend from 'i18next-resources-to-backend';
-
+//test
 import * as Platform from 'loot-core/client/platform';
 
 const languages = import.meta.glob(['/locale/*.json', '!/locale/*_old.json']);
