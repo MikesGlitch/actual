@@ -71,6 +71,7 @@ app.use((req, res, next) => {
   res.set('Cross-Origin-Embedder-Policy', 'require-corp');
   next();
 });
+
 if (process.env.NODE_ENV === 'development') {
   console.log(
     'Running in development mode - Proxying frontend routes to React Dev Server',
@@ -82,20 +83,6 @@ if (process.env.NODE_ENV === 'development') {
       changeOrigin: true,
       ws: true,
       logLevel: 'debug',
-      context: (pathname, req) => {
-        return (
-          !pathname.startsWith('/api') &&
-          !pathname.startsWith('/sync') &&
-          !pathname.startsWith('/account') &&
-          !pathname.startsWith('/gocardless') &&
-          !pathname.startsWith('/simplefin') &&
-          !pathname.startsWith('/secret') &&
-          !pathname.startsWith('/admin') &&
-          !pathname.startsWith('/openid') &&
-          !pathname.startsWith('/mode') &&
-          !req.url.includes('.')
-        );
-      },
     }),
   );
 } else {
