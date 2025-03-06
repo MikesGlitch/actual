@@ -23,7 +23,6 @@ permissions:
 env:
   IMAGES: |
     mclarkgb/test
-
   # ghcr.io/actualbudget/actual-server
   # ghcr.io/actualbudget/actual
 
