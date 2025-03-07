@@ -3,6 +3,8 @@ FROM alpine:3.18 AS deps
 # Install packages required at build time
 RUN apk add --no-cache nodejs yarn python3 openssl build-base
 
+WORKDIR /app
+
 # Copy only the files needed for installing dependencies
 COPY .yarn ./.yarn
 COPY yarn.lock package.json .yarnrc.yml ./
@@ -15,7 +17,7 @@ COPY packages/eslint-plugin-actual/package.json packages/eslint-plugin-actual/pa
 COPY packages/loot-core/package.json packages/loot-core/package.json
 COPY packages/sync-server/package.json packages/sync-server/package.json
 
-# Avoiding memory issues on ARMv7
+# Avoiding memory issues with ARMv7
 RUN if [ "$(uname -m)" = "armv7l" ]; then yarn config set taskPoolConcurrency 2; yarn config set networkConcurrency 5; fi
 
 # Focus the workspaces in production mode (including @actual-app/web you just built)
@@ -24,6 +26,8 @@ RUN if [ "$(uname -m)" = "armv7l" ]; then npm_config_build_from_source=true yarn
 FROM deps AS builder
 
 WORKDIR /app
+
+COPY packages/sync-server ./packages/sync-server
 
 # Remove symbolic links for @actual-app/web and @actual-app/sync-server
 RUN rm -rf ./node_modules/@actual-app/web ./node_modules/@actual-app/sync-server
