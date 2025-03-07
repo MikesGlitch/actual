@@ -17,7 +17,7 @@ COPY packages/eslint-plugin-actual/package.json packages/eslint-plugin-actual/pa
 COPY packages/loot-core/package.json packages/loot-core/package.json
 COPY packages/sync-server/package.json packages/sync-server/package.json
 
-FROM deps as builder
+FROM deps AS builder
 
 WORKDIR /app
 

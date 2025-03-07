@@ -15,14 +15,15 @@ COPY packages/eslint-plugin-actual/package.json packages/eslint-plugin-actual/pa
 COPY packages/loot-core/package.json packages/loot-core/package.json
 COPY packages/sync-server/package.json packages/sync-server/package.json
 
-FROM deps as builder
-
-WORKDIR /app
-
+# Avoiding memory issues on ARMv7
 RUN if [ "$(uname -m)" = "armv7l" ]; then yarn config set taskPoolConcurrency 2; yarn config set networkConcurrency 5; fi
 
 # Focus the workspaces in production mode (including @actual-app/web you just built)
 RUN if [ "$(uname -m)" = "armv7l" ]; then npm_config_build_from_source=true yarn workspaces focus @actual-app/sync-server --production; else yarn workspaces focus @actual-app/sync-server --production; fi
+
+FROM deps AS builder
+
+WORKDIR /app
 
 # Remove symbolic links for @actual-app/web and @actual-app/sync-server
 RUN rm -rf ./node_modules/@actual-app/web ./node_modules/@actual-app/sync-server

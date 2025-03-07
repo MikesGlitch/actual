@@ -1,4 +1,4 @@
-FROM node:18-bookworm as deps
+FROM node:18-bookworm AS deps
 
 # Install packages required at build time
 RUN apt-get update && apt-get install -y openssl
@@ -21,7 +21,7 @@ COPY ./bin/package-browser ./bin/package-browser
 
 RUN yarn install
 
-FROM deps as builder
+FROM deps AS builder
 
 WORKDIR /app
 
@@ -38,7 +38,7 @@ RUN rm -rf ./node_modules/@actual-app/web ./node_modules/@actual-app/sync-server
 COPY packages/desktop-client/package.json ./node_modules/@actual-app/web/package.json
 COPY packages/desktop-client/build ./node_modules/@actual-app/web/build
 
-FROM node:18-bookworm-slim as prod
+FROM node:18-bookworm-slim AS prod
 
 # Minimal runtime dependencies
 RUN apt-get update && apt-get install -y tini && apt-get clean -y && rm -rf /var/lib/apt/lists/*
