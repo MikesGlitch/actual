@@ -43,13 +43,10 @@ jobs:
             packages/sync-server/src
             packages/sync-server/migrations
             packages/sync-server/web-client
+      - name: List
+        run: ls -la
       - name: Add to Release
         uses: softprops/action-gh-release@v2
         with:
           draft: true
-          files: package.json
-      - name: Add to Release 2
-        uses: softprops/action-gh-release@v2
-        with:
-          draft: true
-          files: yarn.lock
+          files: sync-server.zip
