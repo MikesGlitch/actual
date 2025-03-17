@@ -28,28 +28,29 @@ jobs:
         uses: ./.github/actions/setup
       - name: Build the server
         run: yarn build:server
-      - name: Zip the server
-        run: |
-          mkdir -p sync-server
-          cp package.json sync-server
-          cp -r .yarn sync-server
-          cp yarn.lock sync-server
-          cp .yarnrc.yml sync-server
-          cp .yarnrc.yml sync-server
-          cp packages/sync-server/package.json sync-server
-          cp packages/sync-server/app.js sync-server
-          cp -r packages/sync-server/src sync-server
-          cp -r packages/sync-server/migrations sync-server
-          cp -r packages/sync-server/web-client sync-server
-          zip -r sync-server.zip sync-server
       - name: Upload Server with Client Build
         uses: actions/upload-artifact@v4
         with:
           name: sync-server
           include-hidden-files: true
-          path: sync-server.zip
-      - name: List
-        run: ls -la
+          path: |
+            package.json
+            yarn.lock
+            .yarn
+            .yarnrc.yml
+            packages/sync-server/package.json
+            packages/sync-server/app.js
+            packages/sync-server/src
+            packages/sync-server/migrations
+            packages/sync-server/web-client
+      # Download the server build and zip it for the release
+      - name: Download Server with Client Build
+        uses: actions/download-artifact@v2
+        with:
+          name: sync-server
+          path: sync-server
+      - name: Zip Server with Client Build
+        run: zip -r sync-server.zip sync-server
       - name: Add to Release
         uses: softprops/action-gh-release@v2
         with:
