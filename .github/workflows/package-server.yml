@@ -43,3 +43,18 @@ jobs:
             packages/sync-server/src
             packages/sync-server/migrations
             packages/sync-server/web-client
+      # Download the server build and zip it for the release
+      - name: Download Server with Client Build
+        uses: actions/download-artifact@v4
+        with:
+          name: sync-server
+          path: sync-server
+      - name: Zip Server with Client Build
+        run: |
+          cd sync-server
+          zip -r ../sync-server.zip .
+      - name: Add to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: sync-server.zip
