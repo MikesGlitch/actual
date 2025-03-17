@@ -50,7 +50,9 @@ jobs:
           name: sync-server
           path: sync-server
       - name: Zip Server with Client Build
-        run: zip -r sync-server.zip sync-server
+        run: |
+          cd sync-server
+          zip -r ../sync-server.zip .
       - name: Add to Release
         uses: softprops/action-gh-release@v2
         with:
