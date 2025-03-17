@@ -32,8 +32,8 @@ jobs:
         run: |
           mkdir -p sync-server
           cp package.json sync-server
+          cp -r .yarn sync-server
           cp yarn.lock sync-server
-          cp .yarn sync-server
           cp .yarnrc.yml sync-server
           cp .yarnrc.yml sync-server
           cp packages/sync-server/package.json sync-server
