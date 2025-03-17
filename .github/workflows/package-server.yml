@@ -45,7 +45,7 @@ jobs:
             packages/sync-server/web-client
       # Download the server build and zip it for the release
       - name: Download Server with Client Build
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: sync-server
           path: sync-server
