@@ -30,6 +30,7 @@ jobs:
         run: yarn build:server
       - name: Zip the server
         run: |
+          mkdir -p sync-server
           cp package.json sync-server
           cp yarn.lock sync-server
           cp .yarn sync-server
