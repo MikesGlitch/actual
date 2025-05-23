@@ -25,9 +25,9 @@ jobs:
       - name: Update package versions
         run: |
           EDGE_VERSION=$(date -d "+1 month" +%y.%-m.0-edge.%-d)
-          yarn workspace @actual-app/web version $EDGE_VERSION
-          yarn workspace @actual-app/sync-server version $EDGE_VERSION
-          yarn workspace @actual-app/api version $EDGE_VERSION
+          npm version $EDGE_VERSION --no-git-tag-version --workspace=@actual-app/web --no-workspaces-update
+          npm version $EDGE_VERSION --no-git-tag-version --workspace=@actual-app/sync-server --no-workspaces-update
+          npm version $EDGE_VERSION --no-git-tag-version --workspace=@actual-app/api --no-workspaces-update
 
       - name: Yarn install
         run: |
