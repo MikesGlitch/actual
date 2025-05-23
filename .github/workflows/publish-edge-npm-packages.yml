@@ -60,39 +60,39 @@ jobs:
             packages/sync-server/@actual-app/sync-server.tgz
             packages/api/@actual-app/api.tgz
 
-  publish:
-    runs-on: ubuntu-latest
-    name: Publish Edge npm packages
-    needs: build-and-pack
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Download the artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: npm-packages
+  # publish:
+  #   runs-on: ubuntu-latest
+  #   name: Publish Edge npm packages
+  #   needs: build-and-pack
+  #   permissions:
+  #     contents: read
+  #     packages: write
+  #   steps:
+  #     - name: Download the artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: npm-packages
 
-      - name: Setup node and npm registry
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          registry-url: 'https://registry.npmjs.org'
+  #     - name: Setup node and npm registry
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: 20
+  #         registry-url: 'https://registry.npmjs.org'
 
-      - name: Publish Web
-        run: |
-          npm publish desktop-client/@actual-app/web.tgz --access public --tag edge
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+  #     - name: Publish Web
+  #       run: |
+  #         npm publish desktop-client/@actual-app/web.tgz --access public --tag edge
+  #       env:
+  #         NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Publish Sync-Server
-        run: |
-          npm publish sync-server/@actual-app/sync-server.tgz --access public --tag edge
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+  #     - name: Publish Sync-Server
+  #       run: |
+  #         npm publish sync-server/@actual-app/sync-server.tgz --access public --tag edge
+  #       env:
+  #         NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Publish API
-        run: |
-          npm publish api/@actual-app/api.tgz --access public --tag edge
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+  #     - name: Publish API
+  #       run: |
+  #         npm publish api/@actual-app/api.tgz --access public --tag edge
+  #       env:
+  #         NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
