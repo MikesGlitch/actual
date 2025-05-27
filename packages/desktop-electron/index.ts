@@ -252,6 +252,7 @@ async function startSyncServer() {
     const envVariables: Env = {
       ...process.env, // required
       ACTUAL_PORT: `${syncServerConfig.port}`,
+      ACTUAL_HOSTNAME: 'localhost',
       ACTUAL_SERVER_FILES: `${syncServerConfig.ACTUAL_SERVER_FILES}`,
       ACTUAL_USER_FILES: `${syncServerConfig.ACTUAL_USER_FILES}`,
       ACTUAL_DATA_DIR: `${syncServerConfig.ACTUAL_SERVER_DATA_DIR}`,
