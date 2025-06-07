@@ -1,5 +1,6 @@
 import { run as runMigrations } from './src/migrations.js';
 
+// test bump
 runMigrations()
   .then(() => {
     //import the app here becasue initial migrations need to be run first - they are dependencies of the app.js
