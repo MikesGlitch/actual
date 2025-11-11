@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Actual
+Exec=AppRun --no-sandbox %U
+Terminal=false
+Type=Application
+Icon=actual
+StartupWMClass=Actual
+X-AppImage-Version=25.11.0
+Comment=A simple and powerful personal finance system
+Categories=Office;Finance;
