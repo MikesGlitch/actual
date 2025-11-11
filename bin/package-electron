@@ -2,8 +2,8 @@
 
 
 ROOT=`dirname $0`
-RELEASE=""
 CI=${CI:-false}
+BUILD_FOR=${BUILD_FOR:-""}  # Read BUILD_FOR env variable, default to empty
 
 cd "$ROOT/.."
 POSITIONAL=()
@@ -12,10 +12,6 @@ while [[ $# -gt 0 ]]; do
   key="$1"
 
   case $key in
-      --release)
-      RELEASE="production"
-      shift
-      ;;
       --skip-exe-build)
       SKIP_EXE_BUILD=true
       shift
@@ -29,15 +25,27 @@ done
 
 set -- "${POSITIONAL[@]}"
 
-# Get translations
-echo "Updating translations..."
-if ! [ -d packages/desktop-client/locale ]; then
-    git clone https://github.com/actualbudget/translations packages/desktop-client/locale
+buildForFlathub=false
+
+if [ "$BUILD_FOR" == "flathub" ]; then
+    buildForFlathub=true
 fi
-pushd packages/desktop-client/locale > /dev/null
-git pull
-popd > /dev/null
-packages/desktop-client/bin/remove-untranslated-languages
+
+if [ $buildForFlathub ]; then
+    echo "Building for Flathub..."
+    echo "Skipping translations - they are handled in the Flathub build process."
+else
+  # Get translations
+  echo "Updating translations..."
+  if ! [ -d packages/desktop-client/locale ]; then
+      git clone https://github.com/actualbudget/translations packages/desktop-client/locale
+  fi
+  pushd packages/desktop-client/locale > /dev/null
+  git pull
+  popd > /dev/null
+  packages/desktop-client/bin/remove-untranslated-languages
+fi
+
 
 export NODE_OPTIONS="--max-old-space-size=4096"
 
@@ -61,12 +69,12 @@ yarn workspace desktop-electron update-client
         yarn build:dist
         echo "Skipping exe build"
     else
-      if [ "$RELEASE" == "production" ]; then
+        if [ "$buildForFlathub" = true ]; then
+          yarn build --linux=dir
+        else
           yarn build
+        fi
 
-          echo "Created release"
-      else
-          yarn build
-      fi
+        echo "Created desktop-electron package..."
     fi
 )
