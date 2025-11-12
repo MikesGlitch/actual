@@ -24,6 +24,7 @@ const beforePackHook = async (context: AfterPackContext) => {
       force: true,
       projectRootPath,
       onlyModules: ['better-sqlite3', 'bcrypt'],
+      buildFromSource: true,
     });
 
     console.info(`Rebuilt better-sqlite3 and bcrypt with ${arch}!`);
