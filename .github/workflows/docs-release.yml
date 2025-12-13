@@ -3,8 +3,6 @@ name: Release Docs to Github Pages
 # Release docs on every push to master
 on:
   push:
-    branches:
-      - master
     pull_request:
     paths:
       - "packages/docs/**"
