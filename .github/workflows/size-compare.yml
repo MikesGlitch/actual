@@ -151,3 +151,119 @@ jobs:
             --comment-file bundle-stats-comment.md \
             --identifier combined \
             --target pr-body
+
+  electron-sizes:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+      - name: Checkout base branch
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: ${{ github.base_ref }}
+      - name: Set up environment
+        uses: ./.github/actions/setup
+        with:
+          download-translations: 'false'
+
+      - name: Check if electron PR builds were triggered
+        id: check-electron
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RESPONSE=$(curl -sf \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/electron-pr.yml/runs?head_sha=${{ github.event.pull_request.head.sha }}&per_page=1" 2>&1) || {
+            echo "[electron-sizes] Failed to query electron workflow status: $RESPONSE"
+            echo "status=" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+          STATUS=$(echo "$RESPONSE" | jq -r '.workflow_runs[0].status // empty' 2>/dev/null) || STATUS=""
+          echo "status=${STATUS}" >> "$GITHUB_OUTPUT"
+          echo "[electron-sizes] Electron workflow status: ${STATUS:-not triggered}"
+
+      - name: Wait for PR electron build (ubuntu) to succeed
+        if: steps.check-electron.outputs.status != ''
+        uses: fountainhead/action-wait-for-check@5a908a24814494009c4bb27c242ea38c93c593be # v1.2.0
+        id: wait-electron-ubuntu
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          checkName: build (ubuntu-22.04)
+          ref: ${{github.event.pull_request.head.sha}}
+          timeoutSeconds: 3600
+      - name: Wait for PR electron build (windows) to succeed
+        if: steps.check-electron.outputs.status != ''
+        uses: fountainhead/action-wait-for-check@5a908a24814494009c4bb27c242ea38c93c593be # v1.2.0
+        id: wait-electron-windows
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          checkName: build (windows-latest)
+          ref: ${{github.event.pull_request.head.sha}}
+          timeoutSeconds: 3600
+      - name: Wait for PR electron build (macos) to succeed
+        if: steps.check-electron.outputs.status != ''
+        uses: fountainhead/action-wait-for-check@5a908a24814494009c4bb27c242ea38c93c593be # v1.2.0
+        id: wait-electron-macos
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          checkName: build (macos-latest)
+          ref: ${{github.event.pull_request.head.sha}}
+          timeoutSeconds: 3600
+
+      - name: Download electron stats (ubuntu)
+        if: steps.wait-electron-ubuntu.outputs.conclusion == 'success'
+        uses: dawidd6/action-download-artifact@ac66b43f0e6a346234dd65d4d0c8fbb31cb316e5 # v11
+        with:
+          pr: ${{github.event.pull_request.number}}
+          workflow: electron-pr.yml
+          workflow_conclusion: '' # ignore the conclusion of the workflow, since we already checked it
+          name: electron-stats-ubuntu-22.04
+          path: electron-stats
+          allow_forks: true
+          if_no_artifact_found: ignore
+      - name: Download electron stats (windows)
+        if: steps.wait-electron-windows.outputs.conclusion == 'success'
+        uses: dawidd6/action-download-artifact@ac66b43f0e6a346234dd65d4d0c8fbb31cb316e5 # v11
+        with:
+          pr: ${{github.event.pull_request.number}}
+          workflow: electron-pr.yml
+          workflow_conclusion: '' # ignore the conclusion of the workflow, since we already checked it
+          name: electron-stats-windows-latest
+          path: electron-stats
+          allow_forks: true
+          if_no_artifact_found: ignore
+      - name: Download electron stats (macos)
+        if: steps.wait-electron-macos.outputs.conclusion == 'success'
+        uses: dawidd6/action-download-artifact@ac66b43f0e6a346234dd65d4d0c8fbb31cb316e5 # v11
+        with:
+          pr: ${{github.event.pull_request.number}}
+          workflow: electron-pr.yml
+          workflow_conclusion: '' # ignore the conclusion of the workflow, since we already checked it
+          name: electron-stats-macos-latest
+          path: electron-stats
+          allow_forks: true
+          if_no_artifact_found: ignore
+
+      - name: Generate electron sizes comment
+        run: |
+          node packages/ci-actions/bin/electron-sizes-comment.mjs \
+            --stats-dir ./electron-stats \
+            --identifier electron-sizes \
+            --format pr-body > electron-sizes-comment.md
+      - name: Post electron sizes comment
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # Only post if the comment file exists and has content
+          if [ -f electron-sizes-comment.md ] && [ -s electron-sizes-comment.md ]; then
+            node packages/ci-actions/bin/update-bundle-stats-comment.mjs \
+              --comment-file electron-sizes-comment.md \
+              --identifier electron-sizes \
+              --target pr-body
+          else
+            echo "No electron stats available, skipping PR update"
+          fi

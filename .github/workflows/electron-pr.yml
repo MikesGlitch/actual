@@ -64,6 +64,15 @@ jobs:
       - name: Build Electron
         run: ./bin/package-electron
 
+      - name: Collect electron artifact sizes
+        run: node packages/ci-actions/bin/collect-electron-artifact-sizes.mjs --dist packages/desktop-electron/dist --output electron-stats.json
+      - name: Upload electron artifact sizes
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: electron-stats-${{ matrix.os }}
+          if-no-files-found: ignore
+          path: electron-stats.json
+
       - name: Upload Linux x64 AppImage
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
