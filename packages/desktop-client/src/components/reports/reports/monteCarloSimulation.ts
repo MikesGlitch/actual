@@ -1,6 +1,8 @@
 import type {
   MonteCarloAllocationPreset,
+  MonteCarloPotMeta,
   MonteCarloWidget,
+  MonteCarloWithdrawalStrategy,
 } from '@actual-app/core/types/models';
 
 // Illustrative nominal annual return assumptions for the allocation presets.
@@ -26,16 +28,26 @@ export const MAX_HORIZON_YEARS = 100;
 // keeps the headline numbers stable across re-renders and tests exact.
 export const DEFAULT_SIMULATION_SEED = 1234;
 
-export const MONTE_CARLO_DEFAULTS = {
-  startingBalance: 50_000_000, // 500,000.00 in minor units
-  annualWithdrawal: 2_000_000, // 20,000.00 in minor units
-  inflationRate: 0.025 as number | null,
-  horizonYears: 30,
-  allocationPreset: 'equity-60' as MonteCarloAllocationPreset,
-  expectedReturnMean: ALLOCATION_PRESETS['equity-60'].mean,
-  returnStdDev: ALLOCATION_PRESETS['equity-60'].stdDev,
-  simulationCount: 5000,
+/** One invested pot with its own balance and return assumptions */
+export type MonteCarloPot = {
+  id: string;
+  name: string;
+  startingBalance: number; // integer minor units (cents)
+  allocationPreset: MonteCarloAllocationPreset;
+  expectedReturnMean: number; // decimal fraction
+  returnStdDev: number; // decimal fraction
 };
+
+export function createMonteCarloPot(id: string): MonteCarloPot {
+  return {
+    id,
+    name: '',
+    startingBalance: 50_000_000, // 500,000.00 in minor units
+    allocationPreset: 'equity-60',
+    expectedReturnMean: ALLOCATION_PRESETS['equity-60'].mean,
+    returnStdDev: ALLOCATION_PRESETS['equity-60'].stdDev,
+  };
+}
 
 /**
  * The full set of simulation settings the user can configure. Stored in the
@@ -43,22 +55,46 @@ export const MONTE_CARLO_DEFAULTS = {
  * be added here so the configuration UI and the engine stay in sync.
  */
 export type MonteCarloConfig = {
-  startingBalance: number;
+  pots: MonteCarloPot[];
+  /** How the annual withdrawal is taken across pots */
+  withdrawalStrategy: MonteCarloWithdrawalStrategy;
   annualWithdrawal: number;
   inflationRate: number | null;
   horizonYears: number;
-  allocationPreset: MonteCarloAllocationPreset;
-  expectedReturnMean: number;
-  returnStdDev: number;
   simulationCount: number;
 };
+
+export const MONTE_CARLO_DEFAULTS: MonteCarloConfig = {
+  pots: [createMonteCarloPot('pot-1')],
+  withdrawalStrategy: 'proportional',
+  annualWithdrawal: 2_000_000, // 20,000.00 in minor units
+  inflationRate: 0.025,
+  horizonYears: 30,
+  simulationCount: 5000,
+};
+
+function potFromMeta(potMeta: MonteCarloPotMeta, index: number): MonteCarloPot {
+  const defaults = createMonteCarloPot(potMeta.id || `pot-${index + 1}`);
+  return {
+    ...defaults,
+    name: potMeta.name ?? defaults.name,
+    startingBalance: potMeta.startingBalance ?? defaults.startingBalance,
+    allocationPreset: potMeta.allocationPreset ?? defaults.allocationPreset,
+    expectedReturnMean:
+      potMeta.expectedReturnMean ?? defaults.expectedReturnMean,
+    returnStdDev: potMeta.returnStdDev ?? defaults.returnStdDev,
+  };
+}
 
 export function monteCarloConfigFromMeta(
   meta: MonteCarloWidget['meta'] | undefined,
 ): MonteCarloConfig {
   return {
-    startingBalance:
-      meta?.startingBalance ?? MONTE_CARLO_DEFAULTS.startingBalance,
+    pots: meta?.pots?.length
+      ? meta.pots.map(potFromMeta)
+      : [createMonteCarloPot('pot-1')],
+    withdrawalStrategy:
+      meta?.withdrawalStrategy ?? MONTE_CARLO_DEFAULTS.withdrawalStrategy,
     annualWithdrawal:
       meta?.annualWithdrawal ?? MONTE_CARLO_DEFAULTS.annualWithdrawal,
     inflationRate:
@@ -66,17 +102,12 @@ export function monteCarloConfigFromMeta(
         ? meta.inflationRate
         : MONTE_CARLO_DEFAULTS.inflationRate,
     horizonYears: meta?.horizonYears ?? MONTE_CARLO_DEFAULTS.horizonYears,
-    allocationPreset:
-      meta?.allocationPreset ?? MONTE_CARLO_DEFAULTS.allocationPreset,
-    expectedReturnMean:
-      meta?.expectedReturnMean ?? MONTE_CARLO_DEFAULTS.expectedReturnMean,
-    returnStdDev: meta?.returnStdDev ?? MONTE_CARLO_DEFAULTS.returnStdDev,
     simulationCount:
       meta?.simulationCount ?? MONTE_CARLO_DEFAULTS.simulationCount,
   };
 }
 
-export type MonteCarloParams = Omit<MonteCarloConfig, 'allocationPreset'> & {
+export type MonteCarloParams = MonteCarloConfig & {
   seed?: number;
 };
 
@@ -158,16 +189,24 @@ function percentileOfSorted(sorted: Float64Array, p: number) {
  * Runs the drawdown simulation with i.i.d. normal annual returns.
  *
  * Each year, in each simulation: the withdrawal is taken at the start of the
- * year; if the pot can't cover it the simulation is marked depleted for that
- * year (balance clamped to 0 for the rest of the path); otherwise the year's
- * randomly drawn return is applied to the remaining balance. When an
+ * year across all pots (proportionally to their balances, or draining pots in
+ * order); if the pots together can't cover it the simulation is marked
+ * depleted for that year (balances clamped to 0 for the rest of the path);
+ * otherwise each pot gets its own randomly drawn return for the year. When an
  * inflation rate is set, next year's withdrawal grows by it. Returns are
  * nominal - inflation only grows withdrawals, so it is never double-counted.
+ * Pot returns are drawn independently (no cross-pot correlation).
  */
 export function runMonteCarloSimulation(
   params: MonteCarloParams,
 ): MonteCarloResult {
-  const startingBalance = Math.max(0, params.startingBalance);
+  const pots = params.pots.length > 0 ? params.pots : MONTE_CARLO_DEFAULTS.pots;
+  const potCount = pots.length;
+  const potStartBalances = pots.map(pot => Math.max(0, pot.startingBalance));
+  const potMeans = pots.map(pot => pot.expectedReturnMean);
+  const potStdDevs = pots.map(pot => Math.max(0, pot.returnStdDev));
+  const isSequential = params.withdrawalStrategy === 'sequential';
+
   const annualWithdrawal = Math.max(0, params.annualWithdrawal);
   const inflationRate = params.inflationRate;
   const horizonYears = clamp(
@@ -175,8 +214,6 @@ export function runMonteCarloSimulation(
     MIN_HORIZON_YEARS,
     MAX_HORIZON_YEARS,
   );
-  const meanReturn = params.expectedReturnMean;
-  const stdDevReturn = Math.max(0, params.returnStdDev);
   const simulationCount = clamp(
     Math.round(params.simulationCount),
     MIN_SIMULATION_COUNT,
@@ -186,7 +223,7 @@ export function runMonteCarloSimulation(
   const random = mulberry32(params.seed ?? DEFAULT_SIMULATION_SEED);
   const nextNormal = makeNormalSampler(random);
 
-  // Year-major balance buffers: balancesByYear[year][sim]
+  // Year-major balance buffers (totals across pots): balancesByYear[year][sim]
   const balancesByYear: Float64Array[] = [];
   for (let year = 0; year <= horizonYears; year++) {
     balancesByYear.push(new Float64Array(simulationCount));
@@ -200,27 +237,61 @@ export function runMonteCarloSimulation(
   let worstDepletionYear = Infinity;
   let worstFinalBalance = Infinity;
 
+  const startingTotal = potStartBalances.reduce((sum, b) => sum + b, 0);
+  const potBalances = new Float64Array(potCount);
+
   for (let sim = 0; sim < simulationCount; sim++) {
-    let balance = startingBalance;
+    potBalances.set(potStartBalances);
+    let total = startingTotal;
     let withdrawal = annualWithdrawal;
     let depleted = false;
     let simDepletionYear = Infinity;
 
-    balancesByYear[0][sim] = balance;
+    balancesByYear[0][sim] = total;
 
     for (let year = 1; year <= horizonYears; year++) {
       if (!depleted) {
-        balance -= withdrawal;
-        if (balance <= 0) {
-          balance = 0;
+        if (total <= withdrawal) {
+          // The pots together can't cover this year's withdrawal
+          potBalances.fill(0);
+          total = 0;
           depleted = true;
           simDepletionYear = year;
           depletionCounts[year]++;
         } else {
-          balance *= 1 + meanReturn + stdDevReturn * nextNormal();
-          if (balance <= 0) {
-            // A sub-(-100%) return draw wiped the pot out
-            balance = 0;
+          if (isSequential) {
+            let remaining = withdrawal;
+            for (let p = 0; p < potCount && remaining > 0; p++) {
+              const take = Math.min(potBalances[p], remaining);
+              potBalances[p] -= take;
+              remaining -= take;
+            }
+          } else {
+            // Proportional split; the last pot takes the remainder so the
+            // total drops by exactly the withdrawal (no float drift)
+            let remaining = withdrawal;
+            for (let p = 0; p < potCount - 1; p++) {
+              const take = withdrawal * (potBalances[p] / total);
+              potBalances[p] -= take;
+              remaining -= take;
+            }
+            potBalances[potCount - 1] -= remaining;
+          }
+
+          // Each pot draws its own return for the year
+          total = 0;
+          for (let p = 0; p < potCount; p++) {
+            if (potBalances[p] > 0) {
+              potBalances[p] *= 1 + potMeans[p] + potStdDevs[p] * nextNormal();
+              if (potBalances[p] <= 0) {
+                // A sub-(-100%) return draw wiped this pot out
+                potBalances[p] = 0;
+              }
+            }
+            total += potBalances[p];
+          }
+          if (total <= 0) {
+            total = 0;
             depleted = true;
             simDepletionYear = year;
             depletionCounts[year]++;
@@ -230,7 +301,7 @@ export function runMonteCarloSimulation(
           withdrawal *= 1 + inflationRate;
         }
       }
-      balancesByYear[year][sim] = balance;
+      balancesByYear[year][sim] = total;
     }
 
     if (!depleted) {
@@ -239,11 +310,11 @@ export function runMonteCarloSimulation(
 
     if (
       simDepletionYear < worstDepletionYear ||
-      (simDepletionYear === worstDepletionYear && balance < worstFinalBalance)
+      (simDepletionYear === worstDepletionYear && total < worstFinalBalance)
     ) {
       worstSimIndex = sim;
       worstDepletionYear = simDepletionYear;
-      worstFinalBalance = balance;
+      worstFinalBalance = total;
     }
   }
 

@@ -1,25 +1,37 @@
+import type { DragItem } from 'react-aria';
+import { DropIndicator, GridList, useDragAndDrop } from 'react-aria-components';
 import { Trans, useTranslation } from 'react-i18next';
 
-import { SvgQuestion } from '@actual-app/components/icons/v1';
-import { Input } from '@actual-app/components/input';
+import { Button } from '@actual-app/components/button';
+import { SvgAdd, SvgQuestion } from '@actual-app/components/icons/v1';
 import { Select } from '@actual-app/components/select';
 import { styles } from '@actual-app/components/styles';
 import { Text } from '@actual-app/components/text';
 import { theme } from '@actual-app/components/theme';
 import { Tooltip } from '@actual-app/components/tooltip';
 import { View } from '@actual-app/components/view';
-import type { MonteCarloAllocationPreset } from '@actual-app/core/types/models';
+import type { MonteCarloWithdrawalStrategy } from '@actual-app/core/types/models';
 import { css } from '@emotion/css';
+import { v4 as uuidv4 } from 'uuid';
 
+import { MonteCarloNumberInput } from '#components/reports/reports/MonteCarloNumberInput';
 import {
-  ALLOCATION_PRESETS,
+  FIELD_LABEL_ROW_STYLE,
+  FIELD_LABEL_STYLE,
+  FIELD_STYLE,
+  MonteCarloPotConfiguration,
+} from '#components/reports/reports/MonteCarloPotConfiguration';
+import {
+  createMonteCarloPot,
   MAX_HORIZON_YEARS,
   MAX_SIMULATION_COUNT,
   MIN_HORIZON_YEARS,
   MIN_SIMULATION_COUNT,
-  MONTE_CARLO_DEFAULTS,
 } from '#components/reports/reports/monteCarloSimulation';
-import type { MonteCarloConfig } from '#components/reports/reports/monteCarloSimulation';
+import type {
+  MonteCarloConfig,
+  MonteCarloPot,
+} from '#components/reports/reports/monteCarloSimulation';
 import { FinancialInput } from '#components/util/FinancialInput';
 
 const SECTION_TITLE_STYLE = {
@@ -30,31 +42,6 @@ const SECTION_TITLE_STYLE = {
   fontSize: 12,
   letterSpacing: 0.5,
 } as const;
-
-const FIELD_LABEL_STYLE = { fontWeight: 600 } as const;
-
-const FIELD_STYLE = { width: 170 } as const;
-
-const FIELD_LABEL_ROW_STYLE = {
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  marginBottom: 6,
-  minHeight: 18,
-} as const;
-
-// Plain numeric text input - no browser spin buttons
-const NUMBER_INPUT_CLASS = css({
-  '&::-webkit-outer-spin-button, &::-webkit-inner-spin-button': {
-    WebkitAppearance: 'none',
-    margin: 0,
-  },
-  MozAppearance: 'textfield',
-});
-
-function clampValue(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
 
 type MonteCarloConfigurationProps = {
   config: MonteCarloConfig;
@@ -67,14 +54,105 @@ export function MonteCarloConfiguration({
 }: MonteCarloConfigurationProps) {
   const { t } = useTranslation();
 
+  function onPotChange(potId: string, changes: Partial<MonteCarloPot>) {
+    onConfigChange({
+      pots: config.pots.map(pot =>
+        pot.id === potId ? { ...pot, ...changes } : pot,
+      ),
+    });
+  }
+
+  const { dragAndDropHooks } = useDragAndDrop({
+    getItems: keys =>
+      [...keys].map(key => ({ 'text/plain': String(key) }) as DragItem),
+    renderDropIndicator: target => (
+      <DropIndicator
+        target={target}
+        className={css({
+          '&[data-drop-target]': {
+            height: 4,
+            backgroundColor: theme.tableBorderSeparator,
+            opacity: 1,
+            borderRadius: 4,
+          },
+        })}
+      />
+    ),
+    onReorder: e => {
+      const [movedKey] = e.keys;
+      const fromIndex = config.pots.findIndex(pot => pot.id === movedKey);
+      const targetIndex = config.pots.findIndex(pot => pot.id === e.target.key);
+      if (fromIndex === -1 || targetIndex === -1) {
+        return;
+      }
+
+      const newPots = [...config.pots];
+      const [movedPot] = newPots.splice(fromIndex, 1);
+      let insertIndex =
+        targetIndex + (e.target.dropPosition === 'after' ? 1 : 0);
+      if (fromIndex < insertIndex) {
+        insertIndex -= 1;
+      }
+      newPots.splice(insertIndex, 0, movedPot);
+      onConfigChange({ pots: newPots });
+    },
+  });
+
   return (
     <View
       style={{
         backgroundColor: theme.tableBackground,
         padding: 20,
         flexShrink: 0,
+        gap: 25,
       }}
     >
+      {/* Investment pots. Future settings like withdrawal rules or fees
+          belong in their own section alongside these. */}
+      <View>
+        <Text style={SECTION_TITLE_STYLE}>
+          <Trans>Investment pots</Trans>
+        </Text>
+        <View>
+          <GridList
+            aria-label={t('Investment pots')}
+            // Without this, typing in the pot fields moves the list
+            // highlight to whichever pot name matches the keystroke
+            disallowTypeAhead
+            items={config.pots}
+            dependencies={[config, onConfigChange]}
+            dragAndDropHooks={dragAndDropHooks}
+          >
+            {pot => (
+              <MonteCarloPotConfiguration
+                key={pot.id}
+                pot={pot}
+                potNumber={config.pots.indexOf(pot) + 1}
+                canRemove={config.pots.length > 1}
+                onPotChange={changes => onPotChange(pot.id, changes)}
+                onRemove={() =>
+                  onConfigChange({
+                    pots: config.pots.filter(other => other.id !== pot.id),
+                  })
+                }
+              />
+            )}
+          </GridList>
+          <View style={{ flexDirection: 'row' }}>
+            <Button
+              onPress={() =>
+                onConfigChange({
+                  pots: [...config.pots, createMonteCarloPot(uuidv4())],
+                })
+              }
+            >
+              <SvgAdd width={10} height={10} style={{ marginRight: 5 }} />
+              <Trans>Add pot</Trans>
+            </Button>
+          </View>
+        </View>
+      </View>
+
       <View
         style={{
           flexDirection: 'row',
@@ -83,27 +161,12 @@ export function MonteCarloConfiguration({
           rowGap: 25,
         }}
       >
-        {/* Pot & withdrawals. Future settings like withdrawal rules belong
-            in their own section alongside these. */}
+        {/* Withdrawals */}
         <View>
           <Text style={SECTION_TITLE_STYLE}>
-            <Trans>Pot & withdrawals</Trans>
+            <Trans>Withdrawals</Trans>
           </Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 20 }}>
-            <View style={FIELD_STYLE}>
-              <View style={FIELD_LABEL_ROW_STYLE}>
-                <Text style={FIELD_LABEL_STYLE}>
-                  <Trans>Starting pot</Trans>
-                </Text>
-              </View>
-              <FinancialInput
-                value={config.startingBalance}
-                onUpdate={value =>
-                  onConfigChange({ startingBalance: Math.max(0, value) })
-                }
-              />
-            </View>
-
             <View style={FIELD_STYLE}>
               <View style={FIELD_LABEL_ROW_STYLE}>
                 <Text style={FIELD_LABEL_STYLE}>
@@ -114,8 +177,8 @@ export function MonteCarloConfiguration({
                     <View style={{ maxWidth: 300 }}>
                       <Text>
                         <Trans>
-                          How much you take out of the pot each year to live on.
-                          This is what depletes the pot over time.
+                          How much you take out of your pots each year to live
+                          on. This is what depletes them over time.
                         </Trans>
                       </Text>
                     </View>
@@ -131,6 +194,50 @@ export function MonteCarloConfiguration({
                 onUpdate={value =>
                   onConfigChange({ annualWithdrawal: Math.max(0, value) })
                 }
+              />
+            </View>
+
+            <View style={{ width: 220 }}>
+              <View style={FIELD_LABEL_ROW_STYLE}>
+                <Text style={FIELD_LABEL_STYLE}>
+                  <Trans>Withdrawal order</Trans>
+                </Text>
+                <Tooltip
+                  content={
+                    <View style={{ maxWidth: 300 }}>
+                      <Text>
+                        <Trans>
+                          How the annual withdrawal is taken when you have more
+                          than one pot.
+                          <br />
+                          <br />
+                          Proportionally: split across pots based on their
+                          current balances.
+                          <br />
+                          <br />
+                          In pot order: drain the first pot before touching the
+                          next, in the order listed above.
+                        </Trans>
+                      </Text>
+                    </View>
+                  }
+                  placement="bottom start"
+                  style={{ ...styles.tooltip }}
+                >
+                  <SvgQuestion height={12} width={12} cursor="pointer" />
+                </Tooltip>
+              </View>
+              <Select
+                value={config.withdrawalStrategy}
+                onChange={value =>
+                  onConfigChange({
+                    withdrawalStrategy: value as MonteCarloWithdrawalStrategy,
+                  })
+                }
+                options={[
+                  ['proportional', t('Split proportionally across pots')],
+                  ['sequential', t('Drain pots in order')],
+                ]}
               />
             </View>
 
@@ -159,25 +266,16 @@ export function MonteCarloConfiguration({
                   <SvgQuestion height={12} width={12} cursor="pointer" />
                 </Tooltip>
               </View>
-              <Input
-                type="number"
-                className={NUMBER_INPUT_CLASS}
+              <MonteCarloNumberInput
+                value={config.inflationRate}
+                scale={100}
+                allowEmpty
                 min={0}
                 max={100}
-                step={0.1}
-                value={
-                  config.inflationRate == null
-                    ? ''
-                    : Number((config.inflationRate * 100).toFixed(2))
-                }
-                onChange={e =>
-                  onConfigChange({
-                    inflationRate: isNaN(e.target.valueAsNumber)
-                      ? null
-                      : e.target.valueAsNumber / 100,
-                  })
-                }
                 placeholder={t('None')}
+                onCommit={newValue =>
+                  onConfigChange({ inflationRate: newValue })
+                }
               />
             </View>
 
@@ -187,166 +285,15 @@ export function MonteCarloConfiguration({
                   <Trans>Time horizon (years)</Trans>
                 </Text>
               </View>
-              <Input
-                type="number"
-                className={NUMBER_INPUT_CLASS}
+              <MonteCarloNumberInput
+                value={config.horizonYears}
+                roundToInteger
                 min={MIN_HORIZON_YEARS}
                 max={MAX_HORIZON_YEARS}
                 step={1}
-                value={config.horizonYears}
-                onChange={e =>
+                onCommit={newValue =>
                   onConfigChange({
-                    horizonYears: isNaN(e.target.valueAsNumber)
-                      ? MONTE_CARLO_DEFAULTS.horizonYears
-                      : e.target.valueAsNumber,
-                  })
-                }
-                onBlur={() =>
-                  onConfigChange({
-                    horizonYears: clampValue(
-                      Math.round(config.horizonYears),
-                      MIN_HORIZON_YEARS,
-                      MAX_HORIZON_YEARS,
-                    ),
-                  })
-                }
-              />
-            </View>
-          </View>
-        </View>
-
-        {/* Market assumptions */}
-        <View>
-          <Text style={SECTION_TITLE_STYLE}>
-            <Trans>Market assumptions</Trans>
-          </Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 20 }}>
-            <View style={{ width: 220 }}>
-              <View style={FIELD_LABEL_ROW_STYLE}>
-                <Text style={FIELD_LABEL_STYLE}>
-                  <Trans>Portfolio allocation</Trans>
-                </Text>
-                <Tooltip
-                  content={
-                    <View style={{ maxWidth: 300 }}>
-                      <Text>
-                        <Trans>
-                          A one-click starting point that fills in a typical
-                          expected return and volatility for the selected mix of
-                          stocks and bonds. You can still override both values.
-                        </Trans>
-                      </Text>
-                    </View>
-                  }
-                  placement="bottom start"
-                  style={{ ...styles.tooltip }}
-                >
-                  <SvgQuestion height={12} width={12} cursor="pointer" />
-                </Tooltip>
-              </View>
-              <Select
-                value={config.allocationPreset}
-                onChange={value => {
-                  const preset = value as MonteCarloAllocationPreset;
-                  if (preset === 'custom') {
-                    onConfigChange({ allocationPreset: preset });
-                  } else {
-                    onConfigChange({
-                      allocationPreset: preset,
-                      expectedReturnMean: ALLOCATION_PRESETS[preset].mean,
-                      returnStdDev: ALLOCATION_PRESETS[preset].stdDev,
-                    });
-                  }
-                }}
-                options={[
-                  ['equity-100', t('100% stocks')],
-                  ['equity-80', t('80% stocks / 20% bonds')],
-                  ['equity-60', t('60% stocks / 40% bonds')],
-                  ['equity-40', t('40% stocks / 60% bonds')],
-                  ['cash', t('Cash / money market')],
-                  ['custom', t('Custom')],
-                ]}
-              />
-            </View>
-
-            <View style={FIELD_STYLE}>
-              <View style={FIELD_LABEL_ROW_STYLE}>
-                <Text style={FIELD_LABEL_STYLE}>
-                  <Trans>Expected return (%)</Trans>
-                </Text>
-                <Tooltip
-                  content={
-                    <View style={{ maxWidth: 300 }}>
-                      <Text>
-                        <Trans>
-                          The average yearly investment return before inflation.
-                          Each simulated year draws a random return around this
-                          average.
-                        </Trans>
-                      </Text>
-                    </View>
-                  }
-                  placement="bottom start"
-                  style={{ ...styles.tooltip }}
-                >
-                  <SvgQuestion height={12} width={12} cursor="pointer" />
-                </Tooltip>
-              </View>
-              <Input
-                type="number"
-                className={NUMBER_INPUT_CLASS}
-                min={-100}
-                max={100}
-                step={0.1}
-                value={Number((config.expectedReturnMean * 100).toFixed(2))}
-                onChange={e =>
-                  onConfigChange({
-                    expectedReturnMean: isNaN(e.target.valueAsNumber)
-                      ? 0
-                      : e.target.valueAsNumber / 100,
-                    allocationPreset: 'custom',
-                  })
-                }
-              />
-            </View>
-
-            <View style={FIELD_STYLE}>
-              <View style={FIELD_LABEL_ROW_STYLE}>
-                <Text style={FIELD_LABEL_STYLE}>
-                  <Trans>Volatility (std dev %)</Trans>
-                </Text>
-                <Tooltip
-                  content={
-                    <View style={{ maxWidth: 300 }}>
-                      <Text>
-                        <Trans>
-                          How much returns swing from year to year. Higher
-                          volatility means bigger ups and downs, which makes
-                          running out of money more likely even with the same
-                          average return.
-                        </Trans>
-                      </Text>
-                    </View>
-                  }
-                  placement="bottom start"
-                  style={{ ...styles.tooltip }}
-                >
-                  <SvgQuestion height={12} width={12} cursor="pointer" />
-                </Tooltip>
-              </View>
-              <Input
-                type="number"
-                className={NUMBER_INPUT_CLASS}
-                min={0}
-                max={100}
-                step={0.1}
-                value={Number((config.returnStdDev * 100).toFixed(2))}
-                onChange={e =>
-                  onConfigChange({
-                    returnStdDev: isNaN(e.target.valueAsNumber)
-                      ? 0
-                      : Math.max(0, e.target.valueAsNumber / 100),
-                    allocationPreset: 'custom',
+                    horizonYears: newValue ?? MIN_HORIZON_YEARS,
                   })
                 }
               />
@@ -382,27 +329,15 @@ export function MonteCarloConfiguration({
                   <SvgQuestion height={12} width={12} cursor="pointer" />
                 </Tooltip>
               </View>
-              <Input
-                type="number"
-                className={NUMBER_INPUT_CLASS}
+              <MonteCarloNumberInput
+                value={config.simulationCount}
+                roundToInteger
                 min={MIN_SIMULATION_COUNT}
                 max={MAX_SIMULATION_COUNT}
                 step={500}
-                value={config.simulationCount}
-                onChange={e =>
+                onCommit={newValue =>
                   onConfigChange({
-                    simulationCount: isNaN(e.target.valueAsNumber)
-                      ? MONTE_CARLO_DEFAULTS.simulationCount
-                      : e.target.valueAsNumber,
-                  })
-                }
-                onBlur={() =>
-                  onConfigChange({
-                    simulationCount: clampValue(
-                      Math.round(config.simulationCount),
-                      MIN_SIMULATION_COUNT,
-                      MAX_SIMULATION_COUNT,
-                    ),
+                    simulationCount: newValue ?? MIN_SIMULATION_COUNT,
                   })
                 }
               />

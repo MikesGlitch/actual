@@ -130,17 +130,26 @@ export type MonteCarloAllocationPreset =
   | 'cash'
   | 'custom';
 
+export type MonteCarloWithdrawalStrategy = 'proportional' | 'sequential';
+
+export type MonteCarloPotMeta = {
+  id: string;
+  name?: string;
+  startingBalance?: number; // integer minor units (cents)
+  allocationPreset?: MonteCarloAllocationPreset;
+  expectedReturnMean?: number; // decimal fraction (0.06 = 6%)
+  returnStdDev?: number; // decimal fraction
+};
+
 export type MonteCarloWidget = AbstractWidget<
   'monte-carlo-card',
   {
     name?: string;
-    startingBalance?: number; // integer minor units (cents)
+    pots?: MonteCarloPotMeta[];
+    withdrawalStrategy?: MonteCarloWithdrawalStrategy;
     annualWithdrawal?: number; // integer minor units (cents)
     inflationRate?: number | null; // decimal fraction; null = flat withdrawals
     horizonYears?: number;
-    allocationPreset?: MonteCarloAllocationPreset;
-    expectedReturnMean?: number; // decimal fraction (0.06 = 6%)
-    returnStdDev?: number; // decimal fraction
     simulationCount?: number;
   } | null
 >;
