@@ -122,6 +122,29 @@ export type MarkdownWidget = AbstractWidget<
   { content: string; text_align?: 'left' | 'right' | 'center' }
 >;
 
+export type MonteCarloAllocationPreset =
+  | 'equity-100'
+  | 'equity-80'
+  | 'equity-60'
+  | 'equity-40'
+  | 'cash'
+  | 'custom';
+
+export type MonteCarloWidget = AbstractWidget<
+  'monte-carlo-card',
+  {
+    name?: string;
+    startingBalance?: number; // integer minor units (cents)
+    annualWithdrawal?: number; // integer minor units (cents)
+    inflationRate?: number | null; // decimal fraction; null = flat withdrawals
+    horizonYears?: number;
+    allocationPreset?: MonteCarloAllocationPreset;
+    expectedReturnMean?: number; // decimal fraction (0.06 = 6%)
+    returnStdDev?: number; // decimal fraction
+    simulationCount?: number;
+  } | null
+>;
+
 export type AgeOfMoneyGranularity = 'daily' | 'weekly' | 'monthly';
 
 export type AgeOfMoneyWidget = AbstractWidget<
@@ -142,6 +165,7 @@ type SpecializedWidget =
   | BudgetAnalysisWidget
   | CrossoverWidget
   | MarkdownWidget
+  | MonteCarloWidget
   | SummaryWidget
   | CalendarWidget
   | FormulaWidget
