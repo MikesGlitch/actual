@@ -167,6 +167,18 @@ export type MonteCarloWithdrawalRuleMeta = {
   lowerIncreasePct?: number;
 };
 
+export type MonteCarloSpendingPhaseMeta = {
+  id: string;
+  name?: string;
+  /**
+   * Age the phase begins (inclusive). Null/absent = starts immediately;
+   * only meaningful on the first phase.
+   */
+  fromAge?: number | null;
+  /** Yearly spending in minor units, in today's money */
+  annualWithdrawal?: number;
+};
+
 export type MonteCarloPotMeta = {
   id: string;
   name?: string;
@@ -188,8 +200,11 @@ export type MonteCarloWidget = AbstractWidget<
     withdrawalRule?: MonteCarloWithdrawalRuleMeta;
     /** Minimum annual withdrawal in minor units; 0 or absent = no floor */
     minimumWithdrawal?: number;
-    annualWithdrawal?: number; // integer minor units (cents)
-    inflationRate?: number | null; // decimal fraction; null = flat withdrawals
+    spendingPhases?: MonteCarloSpendingPhaseMeta[];
+    /** Mean yearly inflation as a decimal fraction; null = flat withdrawals */
+    inflationMean?: number | null;
+    /** Yearly inflation volatility as a decimal fraction; 0 = fixed rate */
+    inflationStdDev?: number;
     currentAge?: number;
     /** Age the pot must last to; the horizon is targetAge - currentAge */
     targetAge?: number;

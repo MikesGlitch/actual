@@ -15,6 +15,7 @@ import type { MonteCarloWidget } from '@actual-app/core/types/models';
 
 import { EditablePageHeaderTitle } from '#components/EditablePageHeaderTitle';
 import { FinancialText } from '#components/FinancialText';
+import { Checkbox } from '#components/forms';
 import { MobileBackButton } from '#components/mobile/MobileBackButton';
 import { MobilePageHeader, Page, PageHeader } from '#components/Page';
 import { PrivacyFilter } from '#components/PrivacyFilter';
@@ -68,6 +69,7 @@ export function MonteCarlo() {
   const [config, setConfig] = useState<MonteCarloConfig>(MONTE_CARLO_DEFAULTS);
   const [graphView, setGraphView] = useState<MonteCarloGraphView>('all');
   const [resultsView, setResultsView] = useState<'chart' | 'runs'>('chart');
+  const [showTodaysMoney, setShowTodaysMoney] = useState(true);
   const [selectedRunIndex, setSelectedRunIndex] = useState<number | null>(null);
   const [selectionsInitialized, setSelectionsInitialized] = useState(false);
 
@@ -165,6 +167,7 @@ export function MonteCarlo() {
   const result = runMonteCarloSimulation({
     ...config,
     horizonYears: getMonteCarloHorizonYears(config),
+    deflateToTodaysMoney: showTodaysMoney,
   });
 
   // Runs are seeded, so re-running with a capture index reproduces the
@@ -174,6 +177,7 @@ export function MonteCarlo() {
       ? runMonteCarloSimulation({
           ...config,
           horizonYears: getMonteCarloHorizonYears(config),
+          deflateToTodaysMoney: showTodaysMoney,
           captureRunDetail: selectedRunIndex,
         }).runDetail
       : null;
@@ -266,16 +270,45 @@ export function MonteCarlo() {
         </View>
 
         {/* Results */}
-        <Text
+        <View
           style={{
-            ...styles.mediumText,
-            fontWeight: 600,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 10,
             padding: '10px 0',
             flexShrink: 0,
           }}
         >
-          <Trans>Results</Trans>
-        </Text>
+          <Text
+            style={{
+              ...styles.mediumText,
+              fontWeight: 600,
+            }}
+          >
+            <Trans>Results</Trans>
+          </Text>
+          <label
+            htmlFor="mc-todays-money"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              cursor: 'pointer',
+              userSelect: 'none',
+            }}
+          >
+            <Checkbox
+              id="mc-todays-money"
+              checked={showTodaysMoney}
+              onChange={e => setShowTodaysMoney(e.target.checked)}
+            />
+            <Text>
+              <Trans>Show values in today&apos;s money</Trans>
+            </Text>
+          </label>
+        </View>
 
         {/* Headline stats */}
         <View

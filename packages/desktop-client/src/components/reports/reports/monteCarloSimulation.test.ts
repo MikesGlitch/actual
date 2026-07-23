@@ -24,9 +24,11 @@ function makePot(overrides: Partial<MonteCarloPot> = {}): MonteCarloPot {
 }
 
 function makeParams(
-  overrides: Partial<MonteCarloParams> = {},
+  overrides: Partial<MonteCarloParams> & { annualWithdrawal?: number } = {},
   potOverrides: Partial<MonteCarloPot> = {},
 ): MonteCarloParams {
+  // Convenience: a plain annualWithdrawal becomes a single spending phase
+  const { annualWithdrawal = 2_000_000, ...rest } = overrides;
   return {
     pots: [makePot(potOverrides)],
     withdrawalStrategy: 'proportional',
@@ -34,12 +36,15 @@ function makeParams(
     withdrawalRule: WITHDRAWAL_RULE_DEFAULTS,
     minimumWithdrawal: 0,
     currentAge: 60,
-    annualWithdrawal: 2_000_000,
-    inflationRate: null,
+    spendingPhases: [
+      { id: 'phase-1', name: '', fromAge: null, annualWithdrawal },
+    ],
+    inflationMean: null,
+    inflationStdDev: 0,
     horizonYears: 30,
     simulationCount: 1000,
     seed: 42,
-    ...overrides,
+    ...rest,
   };
 }
 
@@ -169,7 +174,7 @@ describe('runMonteCarloSimulation', () => {
     // y1: 200-50=150 (w -> 100); y2: 150-100=50 (w -> 200); y3: depleted
     const inflated = runMonteCarloSimulation(
       makeParams(
-        { annualWithdrawal: 50, inflationRate: 1, horizonYears: 10 },
+        { annualWithdrawal: 50, inflationMean: 1, horizonYears: 10 },
         {
           startingBalance: 200,
           expectedReturnMean: 0,
@@ -182,7 +187,7 @@ describe('runMonteCarloSimulation', () => {
     // Flat withdrawals last one year longer: y4 hits exactly 0
     const flat = runMonteCarloSimulation(
       makeParams(
-        { annualWithdrawal: 50, inflationRate: null, horizonYears: 10 },
+        { annualWithdrawal: 50, inflationMean: null, horizonYears: 10 },
         {
           startingBalance: 200,
           expectedReturnMean: 0,
@@ -727,6 +732,209 @@ describe('runMonteCarloSimulation', () => {
     // no returns are applied at all
     expect(rows[0].potReturns).toEqual([0, 0]);
     expect(failureRow.potReturns).toEqual([null, null]);
+  });
+
+  it('switches spending phases at their starting age', () => {
+    // 30/year for the first 10 years (ages 60-69), 20/year onwards
+    const result = runMonteCarloSimulation(
+      makeParams(
+        {
+          spendingPhases: [
+            { id: 'a', name: '', fromAge: null, annualWithdrawal: 30 },
+            { id: 'b', name: '', fromAge: 70, annualWithdrawal: 20 },
+          ],
+          horizonYears: 20,
+        },
+        { startingBalance: 1_000, expectedReturnMean: 0, returnStdDev: 0 },
+      ),
+    );
+
+    expect(result.successRate).toBe(1);
+    expect(result.medianTotalWithdrawn).toBe(30 * 10 + 20 * 10);
+  });
+
+  it('applies inflation from the simulation start across phase switches', () => {
+    // 100% inflation; phase 2 starts in year 3 (age 62):
+    // y1: 10x1 = 10; y2: 10x2 = 20; y3: 20x4 = 80
+    const result = runMonteCarloSimulation(
+      makeParams(
+        {
+          spendingPhases: [
+            { id: 'a', name: '', fromAge: null, annualWithdrawal: 10 },
+            { id: 'b', name: '', fromAge: 62, annualWithdrawal: 20 },
+          ],
+          inflationMean: 1,
+          horizonYears: 3,
+          captureRunDetail: 0,
+        },
+        { startingBalance: 1_000, expectedReturnMean: 0, returnStdDev: 0 },
+      ),
+    );
+
+    expect(result.runDetail!.map(row => row.withdrawal)).toEqual([10, 20, 80]);
+    expect(result.medianTotalWithdrawn).toBe(110);
+  });
+
+  it('keeps rule adjustments across phase boundaries', () => {
+    // Boundaries rule cuts 10% in year 2 (rate 1000/9000 > 10%); the cut
+    // factor must still discount the smaller phase-2 amount in year 3
+    const result = runMonteCarloSimulation(
+      makeParams(
+        {
+          spendingPhases: [
+            { id: 'a', name: '', fromAge: null, annualWithdrawal: 1_000 },
+            { id: 'b', name: '', fromAge: 62, annualWithdrawal: 500 },
+          ],
+          withdrawalRule: {
+            ...WITHDRAWAL_RULE_DEFAULTS,
+            type: 'boundaries',
+            upperRateThreshold: 0.1,
+            upperCutPct: 0.1,
+            lowerRateThreshold: 0,
+            lowerIncreasePct: 0,
+          },
+          horizonYears: 3,
+          captureRunDetail: 0,
+        },
+        { startingBalance: 10_000, expectedReturnMean: 0, returnStdDev: 0 },
+      ),
+    );
+
+    expect(result.runDetail!.map(row => row.withdrawal)).toEqual([
+      1_000,
+      900, // 10% cut
+      450, // phase-2 amount 500 x the persisted 0.9 factor
+    ]);
+  });
+
+  it('ignores the minimum withdrawal floor when no rule is active', () => {
+    // A leftover floor higher than the planned spending must not raise
+    // withdrawals once the rule is switched back to None
+    const result = runMonteCarloSimulation(
+      makeParams(
+        {
+          annualWithdrawal: 10_000,
+          minimumWithdrawal: 20_000,
+          horizonYears: 10,
+        },
+        { startingBalance: 500_000, expectedReturnMean: 0, returnStdDev: 0 },
+      ),
+    );
+
+    expect(result.medianTotalWithdrawn).toBe(10 * 10_000);
+  });
+
+  it("shows flat real withdrawals when deflating to today's money", () => {
+    // Nominal withdrawals grow with inflation; in today's money the planned
+    // spending reads as a constant amount and the total is years x amount
+    const result = runMonteCarloSimulation(
+      makeParams(
+        {
+          annualWithdrawal: 10_000,
+          inflationMean: 0.1,
+          horizonYears: 5,
+          deflateToTodaysMoney: true,
+          captureRunDetail: 0,
+        },
+        { startingBalance: 1_000_000, expectedReturnMean: 0, returnStdDev: 0 },
+      ),
+    );
+
+    expect(result.runDetail!.map(row => row.withdrawal)).toEqual([
+      10_000, 10_000, 10_000, 10_000, 10_000,
+    ]);
+    expect(result.medianTotalWithdrawn).toBe(5 * 10_000);
+  });
+
+  it('deflated results match an equivalent real-return simulation', () => {
+    // Deflating a nominal simulation must equal simulating directly with
+    // the real return: (1 + nominal) / (1 + inflation) - 1
+    const deflated = runMonteCarloSimulation(
+      makeParams(
+        {
+          annualWithdrawal: 10_000,
+          inflationMean: 1,
+          horizonYears: 10,
+          deflateToTodaysMoney: true,
+        },
+        {
+          startingBalance: 200_000,
+          expectedReturnMean: 1.1, // 110% nominal
+          returnStdDev: 0,
+        },
+      ),
+    );
+    const real = runMonteCarloSimulation(
+      makeParams(
+        { annualWithdrawal: 10_000, inflationMean: null, horizonYears: 10 },
+        {
+          startingBalance: 200_000,
+          expectedReturnMean: 2.1 / 2 - 1, // 5% real
+          returnStdDev: 0,
+        },
+      ),
+    );
+
+    for (let year = 0; year <= 10; year++) {
+      expect(
+        Math.abs(
+          deflated.percentileBands[year].p50 - real.percentileBands[year].p50,
+        ),
+      ).toBeLessThanOrEqual(1);
+    }
+    expect(
+      Math.abs(deflated.medianEndingBalance - real.medianEndingBalance),
+    ).toBeLessThanOrEqual(1);
+  });
+
+  it('is deterministic with inflation volatility and differs from a fixed rate', () => {
+    const volatileParams = makeParams(
+      { inflationMean: 0.025, inflationStdDev: 0.04 },
+      { returnStdDev: 0.15 },
+    );
+    const a = runMonteCarloSimulation(volatileParams);
+    const b = runMonteCarloSimulation(volatileParams);
+    expect(a).toEqual(b);
+
+    const fixed = runMonteCarloSimulation(
+      makeParams(
+        { inflationMean: 0.025, inflationStdDev: 0 },
+        { returnStdDev: 0.15 },
+      ),
+    );
+    expect(a.successRate).not.toBe(fixed.successRate);
+
+    // Percentile ordering holds under inflation volatility too
+    for (const band of a.percentileBands) {
+      expect(band.p10).toBeLessThanOrEqual(band.p50);
+      expect(band.p50).toBeLessThanOrEqual(band.p90);
+    }
+  });
+
+  it('shows flat real withdrawals even under volatile inflation', () => {
+    // However wild the drawn inflation path, deflating by that same path
+    // must bring the planned spending back to its flat today's-money amount
+    const result = runMonteCarloSimulation(
+      makeParams(
+        {
+          annualWithdrawal: 10_000,
+          inflationMean: 0.1,
+          inflationStdDev: 0.5,
+          horizonYears: 5,
+          deflateToTodaysMoney: true,
+          captureRunDetail: 3,
+        },
+        {
+          startingBalance: 100_000_000,
+          expectedReturnMean: 0,
+          returnStdDev: 0,
+        },
+      ),
+    );
+
+    expect(result.runDetail!.map(row => row.withdrawal)).toEqual([
+      10_000, 10_000, 10_000, 10_000, 10_000,
+    ]);
   });
 
   it('clamps out-of-range inputs', () => {

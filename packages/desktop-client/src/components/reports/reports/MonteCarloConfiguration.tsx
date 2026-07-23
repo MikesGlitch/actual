@@ -36,8 +36,8 @@ import type {
   MonteCarloConfig,
   MonteCarloPot,
 } from '#components/reports/reports/monteCarloSimulation';
+import { MonteCarloSpendingPhases } from '#components/reports/reports/MonteCarloSpendingPhases';
 import { MonteCarloWithdrawalRuleConfiguration } from '#components/reports/reports/MonteCarloWithdrawalRuleConfiguration';
-import { FinancialInput } from '#components/util/FinancialInput';
 
 type ConfigurationTab = 'plan' | 'pots' | 'withdrawals';
 
@@ -124,7 +124,7 @@ export function MonteCarloConfiguration({
           selected={activeTab === 'withdrawals'}
           onSelect={() => setActiveTab('withdrawals')}
         >
-          <Trans>Withdrawals</Trans>
+          <Trans>Spending</Trans>
         </ModeButton>
       </View>
 
@@ -144,7 +144,15 @@ export function MonteCarloConfiguration({
 
       {/* Plan details */}
       {activeTab === 'plan' && (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 20 }}>
+        <View
+          style={{
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            // Keep the inputs on a shared baseline even if a label wraps
+            alignItems: 'flex-end',
+            gap: 20,
+          }}
+        >
           <View style={FIELD_STYLE}>
             <View style={FIELD_LABEL_ROW_STYLE}>
               <Text style={FIELD_LABEL_STYLE}>
@@ -181,6 +189,83 @@ export function MonteCarloConfiguration({
                 onConfigChange({
                   targetAge: newValue ?? MONTE_CARLO_DEFAULTS.targetAge,
                 })
+              }
+            />
+          </View>
+
+          <View style={FIELD_STYLE}>
+            <View style={FIELD_LABEL_ROW_STYLE}>
+              <Text style={FIELD_LABEL_STYLE}>
+                <Trans>Inflation (mean %)</Trans>
+              </Text>
+              <Tooltip
+                content={
+                  <View style={{ maxWidth: 300 }}>
+                    <Text>
+                      <Trans>
+                        The average yearly rise in prices. When set, your
+                        planned spending grows with it so your spending power is
+                        maintained.
+                        <br />
+                        <br />
+                        Leave blank to keep withdrawals flat.
+                      </Trans>
+                    </Text>
+                  </View>
+                }
+                placement="bottom start"
+                style={{ ...styles.tooltip }}
+              >
+                <SvgQuestion height={12} width={12} cursor="pointer" />
+              </Tooltip>
+            </View>
+            <MonteCarloNumberInput
+              value={config.inflationMean}
+              scale={100}
+              allowEmpty
+              min={0}
+              max={100}
+              placeholder={t('None')}
+              onCommit={newValue => onConfigChange({ inflationMean: newValue })}
+            />
+          </View>
+
+          <View style={FIELD_STYLE}>
+            <View style={FIELD_LABEL_ROW_STYLE}>
+              <Text style={FIELD_LABEL_STYLE}>
+                <Trans>Inflation (std dev %)</Trans>
+              </Text>
+              <Tooltip
+                content={
+                  <View style={{ maxWidth: 300 }}>
+                    <Text>
+                      <Trans>
+                        Real-world inflation bounces around from year to year
+                        rather than staying fixed. When set, each simulated year
+                        draws its own inflation rate around the mean.
+                        <br />
+                        <br />
+                        Around 2% matches how much US inflation has varied in
+                        recent decades. Set to 0 to use the fixed mean rate
+                        every year.
+                      </Trans>
+                    </Text>
+                  </View>
+                }
+                placement="bottom start"
+                style={{ ...styles.tooltip }}
+              >
+                <SvgQuestion height={12} width={12} cursor="pointer" />
+              </Tooltip>
+            </View>
+            <MonteCarloNumberInput
+              value={config.inflationStdDev}
+              scale={100}
+              min={0}
+              max={50}
+              disabled={config.inflationMean == null}
+              onCommit={newValue =>
+                onConfigChange({ inflationStdDev: newValue ?? 0 })
               }
             />
           </View>
@@ -322,53 +407,18 @@ export function MonteCarloConfiguration({
         </View>
       )}
 
-      {/* Withdrawals */}
+      {/* Spending */}
       {activeTab === 'withdrawals' && (
         <View>
+          <MonteCarloSpendingPhases
+            phases={config.spendingPhases}
+            currentAge={config.currentAge}
+            targetAge={config.targetAge}
+            onPhasesChange={phases =>
+              onConfigChange({ spendingPhases: phases })
+            }
+          />
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 20 }}>
-            <View style={FIELD_STYLE}>
-              <View style={FIELD_LABEL_ROW_STYLE}>
-                <Text style={FIELD_LABEL_STYLE}>
-                  {config.withdrawalRule.type !== 'none' ? (
-                    <Trans>First-year withdrawal</Trans>
-                  ) : (
-                    <Trans>Annual withdrawal</Trans>
-                  )}
-                </Text>
-                <Tooltip
-                  content={
-                    <View style={{ maxWidth: 300 }}>
-                      <Text>
-                        {config.withdrawalRule.type !== 'none' ? (
-                          <Trans>
-                            How much you take out in the first year. Because a
-                            withdrawal rule is active, later years are adjusted
-                            by the rule (plus inflation), separately in every
-                            scenario.
-                          </Trans>
-                        ) : (
-                          <Trans>
-                            How much you take out of your pots each year to live
-                            on. This is what depletes them over time.
-                          </Trans>
-                        )}
-                      </Text>
-                    </View>
-                  }
-                  placement="bottom start"
-                  style={{ ...styles.tooltip }}
-                >
-                  <SvgQuestion height={12} width={12} cursor="pointer" />
-                </Tooltip>
-              </View>
-              <FinancialInput
-                value={config.annualWithdrawal}
-                onUpdate={value =>
-                  onConfigChange({ annualWithdrawal: Math.max(0, value) })
-                }
-              />
-            </View>
-
             <View style={{ width: 220 }}>
               <View style={FIELD_LABEL_ROW_STYLE}>
                 <Text style={FIELD_LABEL_STYLE}>
@@ -414,44 +464,6 @@ export function MonteCarloConfiguration({
                   ['proportional', t('Split proportionally across pots')],
                   ['sequential', t('Drain pots in order')],
                 ]}
-              />
-            </View>
-
-            <View style={FIELD_STYLE}>
-              <View style={FIELD_LABEL_ROW_STYLE}>
-                <Text style={FIELD_LABEL_STYLE}>
-                  <Trans>Inflation rate (%)</Trans>
-                </Text>
-                <Tooltip
-                  content={
-                    <View style={{ maxWidth: 300 }}>
-                      <Text>
-                        <Trans>
-                          When set, your withdrawal grows by this rate each year
-                          so your spending power is maintained.
-                          <br />
-                          <br />
-                          Leave blank to keep withdrawals flat.
-                        </Trans>
-                      </Text>
-                    </View>
-                  }
-                  placement="bottom start"
-                  style={{ ...styles.tooltip }}
-                >
-                  <SvgQuestion height={12} width={12} cursor="pointer" />
-                </Tooltip>
-              </View>
-              <MonteCarloNumberInput
-                value={config.inflationRate}
-                scale={100}
-                allowEmpty
-                min={0}
-                max={100}
-                placeholder={t('None')}
-                onCommit={newValue =>
-                  onConfigChange({ inflationRate: newValue })
-                }
               />
             </View>
           </View>

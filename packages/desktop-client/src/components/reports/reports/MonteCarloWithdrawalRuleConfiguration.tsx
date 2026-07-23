@@ -123,7 +123,7 @@ export function MonteCarloWithdrawalRuleConfiguration({
                     'Withdrawals are reduced when the withdrawal rate crosses an upper limit and increased when it falls below a lower limit.',
                   )}{' '}
           {t(
-            'Your first-year withdrawal sets the starting point; after that the rule adjusts the amount year by year, independently in every scenario.',
+            'The rule adjusts your planned spending year by year, independently in every scenario.',
           )}
         </Text>
       )}

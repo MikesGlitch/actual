@@ -2,6 +2,7 @@ import type {
   MonteCarloAllocationPreset,
   MonteCarloPotMeta,
   MonteCarloReturnModel,
+  MonteCarloSpendingPhaseMeta,
   MonteCarloWidget,
   MonteCarloWithdrawalRuleMeta,
   MonteCarloWithdrawalStrategy,
@@ -45,6 +46,28 @@ export const MAX_HORIZON_YEARS = 100;
 // Fixed PRNG seed so identical inputs always produce identical results -
 // keeps the headline numbers stable across re-renders and tests exact.
 export const DEFAULT_SIMULATION_SEED = 1234;
+
+/** One phase of the planned spending path */
+export type MonteCarloSpendingPhase = {
+  id: string;
+  name: string;
+  /** Age the phase begins (inclusive); null = starts immediately */
+  fromAge: number | null;
+  /** Yearly spending in minor units, in today's money */
+  annualWithdrawal: number;
+};
+
+export function createMonteCarloSpendingPhase(
+  id: string,
+  fromAge: number | null = null,
+): MonteCarloSpendingPhase {
+  return {
+    id,
+    name: '',
+    fromAge,
+    annualWithdrawal: 2_000_000, // 20,000.00 in minor units
+  };
+}
 
 /** One invested pot with its own balance and return assumptions */
 export type MonteCarloPot = {
@@ -113,8 +136,12 @@ export type MonteCarloConfig = {
   withdrawalRule: MonteCarloWithdrawalRuleConfig;
   /** Minimum annual withdrawal in minor units; 0 = no floor */
   minimumWithdrawal: number;
-  annualWithdrawal: number;
-  inflationRate: number | null;
+  /** The planned spending path; each phase runs until the next one starts */
+  spendingPhases: MonteCarloSpendingPhase[];
+  /** Mean yearly inflation as a decimal fraction; null = flat withdrawals */
+  inflationMean: number | null;
+  /** Yearly inflation volatility as a decimal fraction; 0 = fixed rate */
+  inflationStdDev: number;
   currentAge: number;
   /** Age the pot must last to; the horizon is targetAge - currentAge */
   targetAge: number;
@@ -127,8 +154,9 @@ export const MONTE_CARLO_DEFAULTS: MonteCarloConfig = {
   returnModel: 'normal',
   withdrawalRule: WITHDRAWAL_RULE_DEFAULTS,
   minimumWithdrawal: 0,
-  annualWithdrawal: 2_000_000, // 20,000.00 in minor units
-  inflationRate: 0.025,
+  spendingPhases: [createMonteCarloSpendingPhase('phase-1')],
+  inflationMean: 0.025,
+  inflationStdDev: 0.02,
   currentAge: 60,
   targetAge: 90,
   simulationCount: 5000,
@@ -160,6 +188,21 @@ function potFromMeta(potMeta: MonteCarloPotMeta, index: number): MonteCarloPot {
   };
 }
 
+function spendingPhaseFromMeta(
+  phaseMeta: MonteCarloSpendingPhaseMeta,
+  index: number,
+): MonteCarloSpendingPhase {
+  const defaults = createMonteCarloSpendingPhase(
+    phaseMeta.id || `phase-${index + 1}`,
+  );
+  return {
+    ...defaults,
+    name: phaseMeta.name ?? defaults.name,
+    fromAge: phaseMeta.fromAge !== undefined ? phaseMeta.fromAge : null,
+    annualWithdrawal: phaseMeta.annualWithdrawal ?? defaults.annualWithdrawal,
+  };
+}
+
 export function monteCarloConfigFromMeta(
   meta: MonteCarloWidget['meta'] | undefined,
 ): MonteCarloConfig {
@@ -173,12 +216,15 @@ export function monteCarloConfigFromMeta(
     withdrawalRule: { ...WITHDRAWAL_RULE_DEFAULTS, ...meta?.withdrawalRule },
     minimumWithdrawal:
       meta?.minimumWithdrawal ?? MONTE_CARLO_DEFAULTS.minimumWithdrawal,
-    annualWithdrawal:
-      meta?.annualWithdrawal ?? MONTE_CARLO_DEFAULTS.annualWithdrawal,
-    inflationRate:
-      meta?.inflationRate !== undefined
-        ? meta.inflationRate
-        : MONTE_CARLO_DEFAULTS.inflationRate,
+    spendingPhases: meta?.spendingPhases?.length
+      ? meta.spendingPhases.map(spendingPhaseFromMeta)
+      : [createMonteCarloSpendingPhase('phase-1')],
+    inflationMean:
+      meta?.inflationMean !== undefined
+        ? meta.inflationMean
+        : MONTE_CARLO_DEFAULTS.inflationMean,
+    inflationStdDev:
+      meta?.inflationStdDev ?? MONTE_CARLO_DEFAULTS.inflationStdDev,
     currentAge: meta?.currentAge ?? MONTE_CARLO_DEFAULTS.currentAge,
     targetAge: meta?.targetAge ?? MONTE_CARLO_DEFAULTS.targetAge,
     simulationCount:
@@ -199,6 +245,12 @@ export type MonteCarloParams = Omit<MonteCarloConfig, 'targetAge'> & {
    * re-running with the same params reproduces any run exactly.
    */
   captureRunDetail?: number;
+  /**
+   * Convert all monetary outputs to today's money by discounting with the
+   * configured inflation rate. Success rates and depletion timing are
+   * unaffected - this only changes how balances and withdrawals read.
+   */
+  deflateToTodaysMoney?: boolean;
 };
 
 /** One simulated year of a single captured run, values in minor units */
@@ -367,13 +419,40 @@ export function runMonteCarloSimulation(
     return blended;
   });
 
-  const annualWithdrawal = Math.max(0, params.annualWithdrawal);
-  const inflationRate = params.inflationRate;
+  const inflationMean = params.inflationMean;
+  const inflationStdDev =
+    inflationMean != null ? Math.max(0, params.inflationStdDev) : 0;
   const horizonYears = clamp(
     Math.round(params.horizonYears),
     MIN_HORIZON_YEARS,
     MAX_HORIZON_YEARS,
   );
+
+  // The planned spending path in today's money: the active phase's amount
+  // for every year. Inflation is applied per simulation, since each replay
+  // draws its own inflation path when volatility is set.
+  const spendingPhases = params.spendingPhases.length
+    ? [...params.spendingPhases].sort(
+        (a, b) => (a.fromAge ?? -Infinity) - (b.fromAge ?? -Infinity),
+      )
+    : [createMonteCarloSpendingPhase('phase-1')];
+  const plannedTodayByYear = new Float64Array(horizonYears + 1);
+  for (let year = 1; year <= horizonYears; year++) {
+    const age = params.currentAge + year - 1;
+    let amount = Math.max(0, spendingPhases[0].annualWithdrawal);
+    for (const phase of spendingPhases) {
+      if (phase.fromAge == null || phase.fromAge <= age) {
+        amount = Math.max(0, phase.annualWithdrawal);
+      } else {
+        break;
+      }
+    }
+    plannedTodayByYear[year] = amount;
+  }
+
+  // When showing values in today's money, outputs are discounted by each
+  // replay's own realized inflation path
+  const deflate = params.deflateToTodaysMoney === true && inflationMean != null;
   // Sequence replay runs exactly one scenario per historical start year
   // (wrapping around the end of the dataset); the simulation count input
   // doesn't apply there
@@ -408,7 +487,8 @@ export function runMonteCarloSimulation(
 
   const rule = params.withdrawalRule;
   const minimumWithdrawal = Math.max(0, params.minimumWithdrawal);
-  const initialRate = startingTotal > 0 ? annualWithdrawal / startingTotal : 0;
+  const initialRate =
+    startingTotal > 0 ? plannedTodayByYear[1] / startingTotal : 0;
   const withdrawnTotals = new Float64Array(simulationCount);
   const depletionYearBySim = new Int32Array(simulationCount).fill(-1);
 
@@ -419,9 +499,12 @@ export function runMonteCarloSimulation(
   for (let sim = 0; sim < simulationCount; sim++) {
     potBalances.set(potStartBalances);
     let total = startingTotal;
-    let withdrawal = annualWithdrawal;
-    // The plain inflation-grown initial withdrawal, used by floor-ceiling
-    let baselineWithdrawal = annualWithdrawal;
+    // Cuts/raises from the withdrawal rule compound here, applied on top of
+    // the planned spending path (so they persist across spending phases)
+    let adjustmentFactor = 1;
+    // This replay's realized inflation path: each year draws its own rate
+    // when inflation volatility is set
+    let cumInflation = 1;
     let ratchetStreak = 0;
     let withdrawnSum = 0;
     let depleted = false;
@@ -431,44 +514,63 @@ export function runMonteCarloSimulation(
 
     for (let year = 1; year <= horizonYears; year++) {
       if (!depleted) {
+        const invStart = deflate ? 1 / cumInflation : 1;
+        const planned = plannedTodayByYear[year] * cumInflation;
+        let withdrawal: number;
+
         // Apply the dynamic withdrawal rule before taking this year's
-        // withdrawal (from year 2 - year 1 always uses the initial amount)
-        if (year > 1 && rule.type !== 'none') {
-          const currentRate = withdrawal / total;
-          if (rule.type === 'guardrails') {
-            if (currentRate > initialRate * (1 + rule.preservationTriggerPct)) {
-              withdrawal *= 1 - rule.preservationCutPct;
-            } else if (
-              currentRate <
-              initialRate * (1 - rule.prosperityTriggerPct)
-            ) {
-              withdrawal *= 1 + rule.prosperityIncreasePct;
-            }
-          } else if (rule.type === 'ratcheting') {
-            if (total > startingTotal * rule.balanceThresholdMultiple) {
-              ratchetStreak++;
-              if (ratchetStreak >= rule.consecutiveYears) {
-                withdrawal *= 1 + rule.ratchetIncreasePct;
+        // withdrawal (from year 2 - year 1 always uses the planned amount)
+        if (year > 1 && rule.type === 'floor-ceiling') {
+          // Recompute rule: a fixed share of the current balance, kept
+          // within limits around the planned spending
+          withdrawal = clamp(
+            initialRate * total,
+            planned * (1 - rule.floorPct),
+            planned * (1 + rule.ceilingPct),
+          );
+        } else {
+          if (year > 1 && rule.type !== 'none') {
+            const currentRate = (planned * adjustmentFactor) / total;
+            if (rule.type === 'guardrails') {
+              if (
+                currentRate >
+                initialRate * (1 + rule.preservationTriggerPct)
+              ) {
+                adjustmentFactor *= 1 - rule.preservationCutPct;
+              } else if (
+                currentRate <
+                initialRate * (1 - rule.prosperityTriggerPct)
+              ) {
+                adjustmentFactor *= 1 + rule.prosperityIncreasePct;
+              }
+            } else if (rule.type === 'ratcheting') {
+              if (total > startingTotal * rule.balanceThresholdMultiple) {
+                ratchetStreak++;
+                if (ratchetStreak >= rule.consecutiveYears) {
+                  adjustmentFactor *= 1 + rule.ratchetIncreasePct;
+                  ratchetStreak = 0;
+                }
+              } else {
                 ratchetStreak = 0;
               }
-            } else {
-              ratchetStreak = 0;
-            }
-          } else if (rule.type === 'floor-ceiling') {
-            withdrawal = clamp(
-              initialRate * total,
-              baselineWithdrawal * (1 - rule.floorPct),
-              baselineWithdrawal * (1 + rule.ceilingPct),
-            );
-          } else if (rule.type === 'boundaries') {
-            if (currentRate > rule.upperRateThreshold) {
-              withdrawal *= 1 - rule.upperCutPct;
-            } else if (currentRate < rule.lowerRateThreshold) {
-              withdrawal *= 1 + rule.lowerIncreasePct;
+            } else if (rule.type === 'boundaries') {
+              if (currentRate > rule.upperRateThreshold) {
+                adjustmentFactor *= 1 - rule.upperCutPct;
+              } else if (currentRate < rule.lowerRateThreshold) {
+                adjustmentFactor *= 1 + rule.lowerIncreasePct;
+              }
             }
           }
+          withdrawal = planned * adjustmentFactor;
         }
-        if (minimumWithdrawal > 0 && withdrawal < minimumWithdrawal) {
+        // The minimum floor belongs to the withdrawal rule system (the UI
+        // only offers it alongside a rule); with no rule active the planned
+        // spending is taken as-is
+        if (
+          rule.type !== 'none' &&
+          minimumWithdrawal > 0 &&
+          withdrawal < minimumWithdrawal
+        ) {
           withdrawal = minimumWithdrawal;
         }
 
@@ -500,7 +602,7 @@ export function runMonteCarloSimulation(
           // The accessible pots can't cover this year's withdrawal (locked
           // pots may still hold money, but the plan failed to fund spending);
           // they get whatever was reachable
-          withdrawnSum += accessibleTotal;
+          withdrawnSum += accessibleTotal * invStart;
           withdrawalTaken = accessibleTotal;
           if (runDetail && sim === captureIndex) {
             failurePotSnapshot = Array.from(potBalances, (balance, p) =>
@@ -513,7 +615,7 @@ export function runMonteCarloSimulation(
           simDepletionYear = year;
           depletionCounts[year]++;
         } else {
-          withdrawnSum += withdrawal;
+          withdrawnSum += withdrawal * invStart;
           withdrawalTaken = withdrawal;
           if (isSequential) {
             let remaining = withdrawal;
@@ -578,43 +680,66 @@ export function runMonteCarloSimulation(
           }
         }
 
+        // Realize this year's inflation, drawing a random rate when
+        // volatility is set (fixed mean otherwise)
+        if (inflationMean != null) {
+          const yearInflation =
+            inflationStdDev > 0
+              ? Math.max(-0.9, inflationMean + inflationStdDev * nextNormal())
+              : inflationMean;
+          cumInflation *= 1 + yearInflation;
+        }
+        const invEnd = deflate ? 1 / cumInflation : 1;
+
         if (runDetail && sim === captureIndex) {
+          const startInv = invStart;
+          const endInv = invEnd;
           if (fundingShortfall) {
             // The plan failed to fund this year's spending; any remaining
             // balance was locked in pots not yet accessible, not lost to
             // markets
-            const locked = Math.round(yearStartTotal - withdrawalTaken);
+            const locked = Math.round(
+              (yearStartTotal - withdrawalTaken) * startInv,
+            );
             runDetail.push({
               year,
-              startBalance: Math.round(yearStartTotal),
-              withdrawal: Math.round(withdrawalTaken),
+              startBalance: Math.round(yearStartTotal * startInv),
+              withdrawal: Math.round(withdrawalTaken * startInv),
               growth: 0,
               endBalance: 0,
-              potBalances: failurePotSnapshot ?? [],
+              potBalances: (failurePotSnapshot ?? []).map(balance =>
+                Math.round(balance * startInv),
+              ),
               potReturns: capturedPotReturns ?? [],
               ...(locked > 0 && { inaccessibleBalance: locked }),
             });
           } else {
             runDetail.push({
               year,
-              startBalance: Math.round(yearStartTotal),
-              withdrawal: Math.round(withdrawalTaken),
-              growth: Math.round(total - (yearStartTotal - withdrawalTaken)),
-              endBalance: Math.round(total),
-              potBalances: Array.from(potBalances, balance =>
-                Math.round(balance),
+              startBalance: Math.round(yearStartTotal * startInv),
+              withdrawal: Math.round(withdrawalTaken * startInv),
+              // In today's money, growth is the real gain: the inflation
+              // drag comes out of it
+              growth: Math.round(
+                total * endInv - (yearStartTotal - withdrawalTaken) * startInv,
               ),
-              potReturns: capturedPotReturns ?? [],
+              endBalance: Math.round(total * endInv),
+              potBalances: Array.from(potBalances, balance =>
+                Math.round(balance * endInv),
+              ),
+              potReturns: (capturedPotReturns ?? []).map(potReturn =>
+                potReturn == null
+                  ? null
+                  : (1 + potReturn) * (endInv / startInv) - 1,
+              ),
             });
           }
         }
 
-        if (inflationRate != null) {
-          withdrawal *= 1 + inflationRate;
-          baselineWithdrawal *= 1 + inflationRate;
-        }
+        // Store this replay's balance, in today's money when deflating
+        balancesByYear[year][sim] = total * invEnd;
       }
-      balancesByYear[year][sim] = total;
+      // Post-depletion years stay at zero (total is 0 here)
     }
 
     withdrawnTotals[sim] = withdrawnSum;

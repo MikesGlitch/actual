@@ -47,6 +47,8 @@ The configuration area at the top of the report is organized into three tabs.
   - **Random (normal distribution)**: each year's return is drawn randomly around the expected return and volatility you set on each pot. Think of it as a weighted coin flip, year after year.
   - **Historical returns, shuffled**: instead of invented numbers, each simulated year is a real year from US market history (1928 onwards), picked in random order. Real crashes like 1931 and 2008 are in the deck.
   - **Historical sequences (replay)**: each replay is actual history, played in order from a different starting year - "what if you retired in 1929?", "what if you retired in 1972?", and so on. This is the strictest test of bad timing, because real crashes and recoveries happen in their true order.
+- **Inflation (mean %)** - the average yearly rise in prices. When set, your planned spending grows with it so your spending power keeps up. Leave it blank to take exactly the same amount every year.
+- **Inflation (std dev %)** - real-world inflation bounces around from year to year rather than staying fixed. When set, each simulated year draws its own inflation rate around the mean, separately in every replay. The default of 2% is roughly how much US inflation has varied in recent decades; set it to 0 to use the fixed mean rate every year.
 - **Simulations** - how many replays to run (1,000 to 10,000). More replays give steadier numbers but take slightly longer. When using historical sequences, this field is disabled because there is exactly one replay per historical starting year.
 
 ### Investment Pots
@@ -62,22 +64,25 @@ A _pot_ is a chunk of invested money - a pension, a stocks-and-shares account, a
 - **Volatility (std dev %)** - how much the returns swing from year to year. Two pots can have the same average return, but the one with higher volatility is riskier: bad early years can do damage that a smooth ride would avoid.
 - **Accessible from age** - some pots can't be touched until a certain age. For example, personal pensions in the UK can't be accessed until age 57. Leave this blank if the pot is available now. A locked pot stays invested and keeps growing - it just can't pay your bills until you reach the access age.
 
-Drag the handle on the left of each pot to reorder them - the order matters if you choose to drain pots one at a time (see [Withdrawals](#withdrawals) below).
+Drag the handle on the left of each pot to reorder them - the order matters if you choose to drain pots one at a time (see [Spending](#spending) below).
 
 :::tip
 The access age setting is what lets the report model the classic "bridge gap": retiring at 48 with a big pension you can't open until 57, and a smaller pot that has to carry you across those nine years. If the bridge pot runs dry too soon, the plan fails - even though the pension money exists.
 :::
 
-### Withdrawals
+### Spending
 
-![The Withdrawals tab](/img/reports/monte-carlo-withdrawals.png)
+<!-- TODO screenshot: this image predates the spending phases feature - retake the Spending tab screenshot (showing the phases list) once a preview deploy with spending phases is available. -->
 
-- **Annual withdrawal** - how much you take out each year to live on. If you select a withdrawal rule (below), this becomes your **first-year withdrawal**, and the rule adjusts the following years.
+![The Spending tab](/img/reports/monte-carlo-withdrawals.png)
+
+- **Spending phases** - how much you take out each year to live on. You can keep it simple with a single phase, or split your plan into phases with different amounts - for example, $30,000 a year for your first 10 years of retirement while you're travelling, then $20,000 a year onwards. Each phase sets a yearly amount from a chosen age until the next phase begins; the first phase always starts now. Amounts are in today's money - the inflation settings on the Plan Details tab are applied on top, so "$20,000 from age 65" always means $20,000 of today's spending power.
 - **Withdrawal order** - only matters if you have more than one pot:
   - **Split proportionally across pots**: each year's withdrawal is taken from all pots in proportion to their size, so they shrink together.
   - **Drain pots in order**: empty the first pot in your list before touching the next - for example, spend your taxable account first and let the pension keep compounding. Pots that haven't reached their access age are skipped until they unlock.
-- **Inflation rate (%)** - when set, your withdrawal grows by this each year so your spending power keeps up with rising prices. Leave it blank to take exactly the same amount every year.
 - **Withdrawal rule** and **Minimum withdrawal** - see the next section.
+
+The inflation settings that grow your spending over time live on the [Plan Details](#plan-details) tab.
 
 ## Withdrawal Rules Explained
 
@@ -85,7 +90,7 @@ By default, the simulation withdraws the same (inflation-adjusted) amount every 
 
 All the rules share two ideas:
 
-- Your **Annual withdrawal** sets the first year's spending. From the second year onward, the rule adjusts the amount - independently in every replay, reacting to how that replay is going.
+- Your **spending phases** set the planned amounts. From the second year onward, the rule adjusts what's actually taken - independently in every replay, reacting to how that replay is going. A cut or raise carries across phase boundaries: if the rule cut your spending by 10% during a rough patch, the next phase's amount starts 10% lower too.
 - Rules usually improve your **success rate** by cutting spending in bad times, but that safety isn't free - you get it by living on less. Keep an eye on the **Median total withdrawn** stat to see what a rule costs you in income.
 
 If you set a **Minimum withdrawal**, your yearly spending never drops below that amount, no matter what the rule says.
@@ -107,6 +112,8 @@ Instead of a fixed amount, each year you withdraw a fixed **percentage of whatev
 A simpler version of Guardrails: you set an upper and lower limit on the withdrawal percentage directly. Above the upper limit, spending is cut; below the lower limit, it's increased.
 
 ## Reading the Results
+
+By default, every money figure in the results is shown in **today's money** - what the amounts would actually be worth in terms of today's prices, discounted by each replay's own inflation path. Untick **Show values in today's money** to see the raw future amounts instead; they'll look much bigger over long horizons, but most of that is inflation rather than real growth. The success rate and failure ages are the same either way.
 
 ### The Headline Numbers
 

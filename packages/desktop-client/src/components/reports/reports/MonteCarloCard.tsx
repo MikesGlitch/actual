@@ -42,6 +42,7 @@ export function MonteCarloCard({
   const result = runMonteCarloSimulation({
     ...config,
     horizonYears: getMonteCarloHorizonYears(config),
+    deflateToTodaysMoney: true,
   });
 
   const endAge = config.currentAge + result.horizonYears;
