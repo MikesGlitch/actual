@@ -55,7 +55,7 @@ The configuration area at the top of the report is organized into three tabs.
 
 A _pot_ is a chunk of invested money - a pension, a stocks-and-shares account, a savings account. You can model one pot or several, each with its own settings:
 
-- **Pot name** - anything you like, such as "Pension" or "ISA".
+- **Pot name** - anything you like, such as "Pension".
 - **Starting balance** - how much is in the pot today.
 - **Portfolio allocation** - a one-click preset that fills in a typical expected return and volatility for a given mix of stocks and bonds. A pot that's 100% stocks tends to grow faster but swings harder; a cash pot barely moves in either direction. You can always override the numbers, which switches the pot to **Custom**.
 - **Expected return (%)** - the average yearly growth you expect from this pot, before inflation.
