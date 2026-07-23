@@ -101,8 +101,8 @@ export function MonteCarloRunsTable({
             total: simulationCount,
           })}
         </Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-          <Text style={{ color: theme.pageTextSubdued, marginRight: 4 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <Text style={{ color: theme.pageText, marginRight: 4 }}>
             <Trans>Jump to:</Trans>
           </Text>
           {(
@@ -116,9 +116,8 @@ export function MonteCarloRunsTable({
           ).map(([label, percentile]) => (
             <Button
               key={label}
-              variant="bare"
+              variant="menu"
               onPress={() => jumpToPercentile(percentile)}
-              style={{ color: theme.pageTextLink, padding: '2px 6px' }}
             >
               {label}
             </Button>
@@ -144,6 +143,8 @@ export function MonteCarloRunsTable({
         style={{
           flexDirection: 'row',
           paddingBottom: 8,
+          paddingLeft: 8,
+          paddingRight: 8,
           borderBottom: `1px solid ${theme.tableBorder}`,
           gap: 10,
         }}
@@ -186,6 +187,8 @@ export function MonteCarloRunsTable({
                 alignItems: 'center',
                 flex: 1,
                 gap: 10,
+                paddingLeft: 8,
+                paddingRight: 8,
               }}
             >
               <Text style={{ width: 80, textAlign: 'left' }}>

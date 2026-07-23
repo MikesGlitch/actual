@@ -45,7 +45,7 @@ export function MonteCarloRunDetailTable({
 
   const lastRow = rows[rows.length - 1];
   const hasSurvived = lastRow != null && lastRow.endBalance > 0;
-  const showPotColumns = pots.length > 1;
+  const showPotColumns = pots.length > 0;
 
   return (
     <View>
