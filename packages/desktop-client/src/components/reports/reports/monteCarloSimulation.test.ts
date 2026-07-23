@@ -604,6 +604,131 @@ describe('runMonteCarloSimulation', () => {
     expect(result.medianDepletionYear).toBe(10);
   });
 
+  it('reports per-run summaries consistent with the aggregates', () => {
+    const result = runMonteCarloSimulation(
+      makeParams(
+        { annualWithdrawal: 2_500_000 },
+        { startingBalance: 30_000_000, returnStdDev: 0.15 },
+      ),
+    );
+
+    expect(result.endingBalances).toHaveLength(result.simulationCount);
+    expect(result.depletionYearBySim).toHaveLength(result.simulationCount);
+    expect(result.totalWithdrawnBySim).toHaveLength(result.simulationCount);
+
+    let survived = 0;
+    for (let sim = 0; sim < result.simulationCount; sim++) {
+      if (result.depletionYearBySim[sim] === -1) {
+        survived++;
+      } else {
+        // Depleted runs end at zero
+        expect(result.endingBalances[sim]).toBe(0);
+      }
+    }
+    expect(survived / result.simulationCount).toBe(result.successRate);
+  });
+
+  it('captures a run year by year matching the closed-form recurrence', () => {
+    const params = makeParams(
+      { annualWithdrawal: 10_000, horizonYears: 30, captureRunDetail: 0 },
+      {
+        startingBalance: 100_000,
+        expectedReturnMean: 0.05,
+        returnStdDev: 0,
+      },
+    );
+    const result = runMonteCarloSimulation(params);
+    const rows = result.runDetail;
+    expect(rows).toBeDefined();
+
+    // Replicate the recurrence independently
+    let balance = 100_000;
+    for (const row of rows!) {
+      expect(row.startBalance).toBe(Math.round(balance));
+      if (balance <= 10_000) {
+        // Depletion year: only the remainder could be withdrawn
+        expect(row.withdrawal).toBe(Math.round(balance));
+        expect(row.endBalance).toBe(0);
+        break;
+      }
+      expect(row.withdrawal).toBe(10_000);
+      const afterWithdrawal = balance - 10_000;
+      balance = afterWithdrawal * 1.05;
+      expect(row.endBalance).toBe(Math.round(balance));
+      expect(row.growth).toBe(Math.round(balance - afterWithdrawal));
+    }
+
+    // Rows stop at the depletion year
+    const lastRow = rows![rows!.length - 1];
+    expect(lastRow.year).toBe(result.medianDepletionYear);
+    expect(lastRow.endBalance).toBe(0);
+  });
+
+  it('replays a volatile run identically to the original', () => {
+    const base = makeParams({}, { returnStdDev: 0.15 });
+    const original = runMonteCarloSimulation(base);
+
+    const simIndex = 123;
+    const replay = runMonteCarloSimulation({
+      ...base,
+      captureRunDetail: simIndex,
+    });
+    const rows = replay.runDetail!;
+
+    const depletionYear = original.depletionYearBySim[simIndex];
+    if (depletionYear === -1) {
+      expect(rows).toHaveLength(original.horizonYears);
+      expect(rows[rows.length - 1].endBalance).toBe(
+        Math.round(original.endingBalances[simIndex]),
+      );
+    } else {
+      expect(rows).toHaveLength(depletionYear);
+      expect(rows[rows.length - 1].endBalance).toBe(0);
+    }
+  });
+
+  it('marks locked money on a captured bridge-gap failure row', () => {
+    const result = runMonteCarloSimulation(
+      makeParams({
+        pots: [
+          makePot({
+            id: 'isa',
+            startingBalance: 100,
+            expectedReturnMean: 0,
+            returnStdDev: 0,
+          }),
+          makePot({
+            id: 'pension',
+            startingBalance: 1_000,
+            expectedReturnMean: 0,
+            returnStdDev: 0,
+            accessAge: 120,
+          }),
+        ],
+        annualWithdrawal: 30,
+        horizonYears: 20,
+        captureRunDetail: 0,
+      }),
+    );
+
+    const rows = result.runDetail!;
+    const failureRow = rows[rows.length - 1];
+    // y1 70, y2 40, y3 10 accessible; year 4 fails with 10 reachable
+    expect(failureRow.year).toBe(4);
+    expect(failureRow.withdrawal).toBe(10);
+    // The locked pension is not an investment loss
+    expect(failureRow.growth).toBe(0);
+    expect(failureRow.endBalance).toBe(0);
+    expect(failureRow.inaccessibleBalance).toBe(1_000);
+    // Per-pot view: the ISA was consumed, the pension stayed locked
+    expect(failureRow.potBalances).toEqual([0, 1_000]);
+    expect(rows[0].potBalances).toEqual([70, 1_000]);
+    // Zero-volatility pots return exactly 0% each year; on the failure year
+    // no returns are applied at all
+    expect(rows[0].potReturns).toEqual([0, 0]);
+    expect(failureRow.potReturns).toEqual([null, null]);
+  });
+
   it('clamps out-of-range inputs', () => {
     const result = runMonteCarloSimulation(
       makeParams({ simulationCount: 50, horizonYears: 500 }),

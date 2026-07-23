@@ -4,6 +4,7 @@ import { useParams } from 'react-router';
 
 import { Button } from '@actual-app/components/button';
 import { useResponsive } from '@actual-app/components/hooks/useResponsive';
+import { ModeButton } from '@actual-app/components/mode-button';
 import { Paragraph } from '@actual-app/components/paragraph';
 import { Select } from '@actual-app/components/select';
 import { styles } from '@actual-app/components/styles';
@@ -23,6 +24,8 @@ import { MonteCarloHistogram } from '#components/reports/graphs/MonteCarloHistog
 import { LoadingIndicator } from '#components/reports/LoadingIndicator';
 import { MonteCarloConfiguration } from '#components/reports/reports/MonteCarloConfiguration';
 import { HISTORICAL_ANNUAL_RETURNS } from '#components/reports/reports/monteCarloHistoricalReturns';
+import { MonteCarloRunDetailTable } from '#components/reports/reports/MonteCarloRunDetailTable';
+import { MonteCarloRunsTable } from '#components/reports/reports/MonteCarloRunsTable';
 import {
   getMonteCarloHorizonYears,
   MONTE_CARLO_DEFAULTS,
@@ -64,12 +67,20 @@ export function MonteCarlo() {
 
   const [config, setConfig] = useState<MonteCarloConfig>(MONTE_CARLO_DEFAULTS);
   const [graphView, setGraphView] = useState<MonteCarloGraphView>('all');
+  const [resultsView, setResultsView] = useState<'chart' | 'runs'>('chart');
+  const [selectedRunIndex, setSelectedRunIndex] = useState<number | null>(null);
   const [selectionsInitialized, setSelectionsInitialized] = useState(false);
 
   // reset when widget changes
   useEffect(() => {
     setSelectionsInitialized(false);
   }, [widget?.id]);
+
+  // A selected run refers to a specific simulation; drop the selection when
+  // the configuration (and therefore the simulation) changes
+  useEffect(() => {
+    setSelectedRunIndex(null);
+  }, [config]);
 
   // initialize once when the widget (if any) is available
   useEffect(() => {
@@ -155,6 +166,17 @@ export function MonteCarlo() {
     ...config,
     horizonYears: getMonteCarloHorizonYears(config),
   });
+
+  // Runs are seeded, so re-running with a capture index reproduces the
+  // selected run exactly; only computed while a run is being inspected
+  const runDetailRows =
+    selectedRunIndex != null
+      ? runMonteCarloSimulation({
+          ...config,
+          horizonYears: getMonteCarloHorizonYears(config),
+          captureRunDetail: selectedRunIndex,
+        }).runDetail
+      : null;
 
   // The age the simulation actually runs to (differs from targetAge only
   // when the configured ages produce a clamped horizon)
@@ -348,13 +370,13 @@ export function MonteCarlo() {
           </View>
         </View>
 
-        {/* Portfolio performance chart */}
+        {/* Portfolio performance chart / simulation runs table */}
         <View
           style={{
             backgroundColor: theme.tableBackground,
             padding: 20,
-            paddingBottom: 10,
-            height: 470,
+            paddingBottom: resultsView === 'chart' ? 10 : 20,
+            ...(resultsView === 'chart' && { height: 470 }),
             flexShrink: 0,
           }}
         >
@@ -369,52 +391,97 @@ export function MonteCarlo() {
               flexShrink: 0,
             }}
           >
-            <Text style={{ ...styles.mediumText, fontWeight: 600 }}>
-              <Trans>Portfolio performance</Trans>
-            </Text>
-            <Select
-              value={graphView}
-              onChange={value => setGraphView(value as MonteCarloGraphView)}
-              options={[
-                ['all', t('All scenarios')],
-                ['single-worst', t('Single worst run')],
-                ['worst-case', t('Worst-case scenario (5th percentile)')],
-                ['pessimistic', t('Pessimistic scenario (30th percentile)')],
-                ['median', t('Median scenario (50th percentile)')],
-                ['optimistic', t('Optimistic scenario (70th percentile)')],
-              ]}
-              style={{ width: 280 }}
-            />
-          </View>
-          {graphView !== 'all' && (
-            <Text
-              style={{
-                color: theme.pageText,
-                marginBottom: 10,
-                flexShrink: 0,
-              }}
+            <View
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 15 }}
             >
-              {graphView === 'single-worst'
-                ? t(
-                    'The unluckiest of all {{simulationCount}} simulated runs - the one that ran out of money earliest.',
-                    { simulationCount: result.simulationCount },
-                  )
-                : graphView === 'worst-case'
-                  ? t('95% of scenarios stayed above this line.')
-                  : graphView === 'pessimistic'
-                    ? t('70% of scenarios stayed above this line.')
-                    : graphView === 'median'
-                      ? t('Half of scenarios stayed above this line.')
-                      : t('30% of scenarios stayed above this line.')}
-            </Text>
+              <Text style={{ ...styles.mediumText, fontWeight: 600 }}>
+                {resultsView === 'chart' ? (
+                  <Trans>Portfolio performance</Trans>
+                ) : (
+                  <Trans>Simulation runs</Trans>
+                )}
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 5 }}>
+                <ModeButton
+                  selected={resultsView === 'chart'}
+                  onSelect={() => setResultsView('chart')}
+                >
+                  <Trans>Chart</Trans>
+                </ModeButton>
+                <ModeButton
+                  selected={resultsView === 'runs'}
+                  onSelect={() => setResultsView('runs')}
+                >
+                  <Trans>Runs</Trans>
+                </ModeButton>
+              </View>
+            </View>
+            {resultsView === 'chart' && (
+              <Select
+                value={graphView}
+                onChange={value => setGraphView(value as MonteCarloGraphView)}
+                options={[
+                  ['all', t('All scenarios')],
+                  ['single-worst', t('Single worst run')],
+                  ['worst-case', t('Worst-case scenario (5th percentile)')],
+                  ['pessimistic', t('Pessimistic scenario (30th percentile)')],
+                  ['median', t('Median scenario (50th percentile)')],
+                  ['optimistic', t('Optimistic scenario (70th percentile)')],
+                ]}
+                style={{ width: 280 }}
+              />
+            )}
+          </View>
+          {resultsView === 'chart' ? (
+            <>
+              {graphView !== 'all' && (
+                <Text
+                  style={{
+                    color: theme.pageText,
+                    marginBottom: 10,
+                    flexShrink: 0,
+                  }}
+                >
+                  {graphView === 'single-worst'
+                    ? t(
+                        'The unluckiest of all {{simulationCount}} simulated runs - the one that ran out of money earliest.',
+                        { simulationCount: result.simulationCount },
+                      )
+                    : graphView === 'worst-case'
+                      ? t('95% of scenarios stayed above this line.')
+                      : graphView === 'pessimistic'
+                        ? t('70% of scenarios stayed above this line.')
+                        : graphView === 'median'
+                          ? t('Half of scenarios stayed above this line.')
+                          : t('30% of scenarios stayed above this line.')}
+                </Text>
+              )}
+              <MonteCarloGraph
+                percentileBands={result.percentileBands}
+                startAge={config.currentAge}
+                worstRunPath={result.worstRunPath}
+                view={graphView}
+                style={{ height: '100%', flex: 1 }}
+              />
+            </>
+          ) : selectedRunIndex != null && runDetailRows != null ? (
+            <MonteCarloRunDetailTable
+              rows={runDetailRows}
+              pots={config.pots}
+              simIndex={selectedRunIndex}
+              simulationCount={result.simulationCount}
+              startAge={config.currentAge}
+              onBack={() => setSelectedRunIndex(null)}
+            />
+          ) : (
+            <MonteCarloRunsTable
+              endingBalances={result.endingBalances}
+              depletionYearBySim={result.depletionYearBySim}
+              totalWithdrawnBySim={result.totalWithdrawnBySim}
+              startAge={config.currentAge}
+              onSelectRun={simIndex => setSelectedRunIndex(simIndex)}
+            />
           )}
-          <MonteCarloGraph
-            percentileBands={result.percentileBands}
-            startAge={config.currentAge}
-            worstRunPath={result.worstRunPath}
-            view={graphView}
-            style={{ height: '100%', flex: 1 }}
-          />
         </View>
 
         {/* Depletion histogram */}

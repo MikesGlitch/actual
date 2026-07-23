@@ -194,6 +194,35 @@ export type MonteCarloParams = Omit<MonteCarloConfig, 'targetAge'> & {
   seed?: number;
   /** Override the bundled historical dataset (used in tests) */
   historicalReturns?: HistoricalAnnualReturn[];
+  /**
+   * Sim index to capture year-by-year detail for. Because runs are seeded,
+   * re-running with the same params reproduces any run exactly.
+   */
+  captureRunDetail?: number;
+};
+
+/** One simulated year of a single captured run, values in minor units */
+export type MonteCarloRunDetailRow = {
+  year: number;
+  /** Total balance at the start of the year, before the withdrawal */
+  startBalance: number;
+  /** Amount actually withdrawn (the accessible remainder on failure) */
+  withdrawal: number;
+  /** Investment gain/loss applied after the withdrawal */
+  growth: number;
+  endBalance: number;
+  /** End-of-year balance per pot, in the order the pots are configured */
+  potBalances: number[];
+  /**
+   * The return each pot actually experienced that year, as a decimal
+   * fraction; null when the pot had no balance or the plan failed
+   */
+  potReturns: Array<number | null>;
+  /**
+   * Set on a failure year when money remained in pots that hadn't reached
+   * their access age - the plan failed despite this locked balance
+   */
+  inaccessibleBalance?: number;
 };
 
 export type MonteCarloPercentileBand = {
@@ -234,6 +263,14 @@ export type MonteCarloResult = {
    * lowest ending balance if none ran out.
    */
   worstRunPath: number[];
+  /** Final balance of every simulation, in minor units */
+  endingBalances: Float64Array;
+  /** Depletion year per simulation; -1 = survived the full horizon */
+  depletionYearBySim: Int32Array;
+  /** Total amount withdrawn over the horizon per simulation */
+  totalWithdrawnBySim: Float64Array;
+  /** Year-by-year rows for the sim requested via captureRunDetail */
+  runDetail?: MonteCarloRunDetailRow[];
   simulationCount: number;
   horizonYears: number;
 };
@@ -373,6 +410,11 @@ export function runMonteCarloSimulation(
   const minimumWithdrawal = Math.max(0, params.minimumWithdrawal);
   const initialRate = startingTotal > 0 ? annualWithdrawal / startingTotal : 0;
   const withdrawnTotals = new Float64Array(simulationCount);
+  const depletionYearBySim = new Int32Array(simulationCount).fill(-1);
+
+  const captureIndex = params.captureRunDetail ?? -1;
+  const runDetail: MonteCarloRunDetailRow[] | undefined =
+    captureIndex >= 0 && captureIndex < simulationCount ? [] : undefined;
 
   for (let sim = 0; sim < simulationCount; sim++) {
     potBalances.set(potStartBalances);
@@ -441,11 +483,30 @@ export function runMonteCarloSimulation(
           }
         }
 
+        const yearStartTotal = total;
+        let withdrawalTaken: number;
+        let fundingShortfall = false;
+
+        // Per-pot balances at the point of failure: accessible pots are
+        // consumed, locked pots keep their money
+        let failurePotSnapshot: number[] | null = null;
+        const capturedPotReturns =
+          runDetail && sim === captureIndex
+            ? new Array<number | null>(potCount).fill(null)
+            : null;
+
         if (accessibleTotal <= withdrawal) {
+          fundingShortfall = true;
           // The accessible pots can't cover this year's withdrawal (locked
           // pots may still hold money, but the plan failed to fund spending);
           // they get whatever was reachable
           withdrawnSum += accessibleTotal;
+          withdrawalTaken = accessibleTotal;
+          if (runDetail && sim === captureIndex) {
+            failurePotSnapshot = Array.from(potBalances, (balance, p) =>
+              year >= potAccessFromYear[p] ? 0 : Math.round(balance),
+            );
+          }
           potBalances.fill(0);
           total = 0;
           depleted = true;
@@ -453,6 +514,7 @@ export function runMonteCarloSimulation(
           depletionCounts[year]++;
         } else {
           withdrawnSum += withdrawal;
+          withdrawalTaken = withdrawal;
           if (isSequential) {
             let remaining = withdrawal;
             for (let p = 0; p < potCount && remaining > 0; p++) {
@@ -497,6 +559,9 @@ export function runMonteCarloSimulation(
                 blended && historyIndex >= 0
                   ? blended[historyIndex]
                   : potMeans[p] + potStdDevs[p] * nextNormal();
+              if (capturedPotReturns) {
+                capturedPotReturns[p] = yearReturn;
+              }
               potBalances[p] *= 1 + yearReturn;
               if (potBalances[p] <= 0) {
                 // A sub-(-100%) return draw wiped this pot out
@@ -512,6 +577,38 @@ export function runMonteCarloSimulation(
             depletionCounts[year]++;
           }
         }
+
+        if (runDetail && sim === captureIndex) {
+          if (fundingShortfall) {
+            // The plan failed to fund this year's spending; any remaining
+            // balance was locked in pots not yet accessible, not lost to
+            // markets
+            const locked = Math.round(yearStartTotal - withdrawalTaken);
+            runDetail.push({
+              year,
+              startBalance: Math.round(yearStartTotal),
+              withdrawal: Math.round(withdrawalTaken),
+              growth: 0,
+              endBalance: 0,
+              potBalances: failurePotSnapshot ?? [],
+              potReturns: capturedPotReturns ?? [],
+              ...(locked > 0 && { inaccessibleBalance: locked }),
+            });
+          } else {
+            runDetail.push({
+              year,
+              startBalance: Math.round(yearStartTotal),
+              withdrawal: Math.round(withdrawalTaken),
+              growth: Math.round(total - (yearStartTotal - withdrawalTaken)),
+              endBalance: Math.round(total),
+              potBalances: Array.from(potBalances, balance =>
+                Math.round(balance),
+              ),
+              potReturns: capturedPotReturns ?? [],
+            });
+          }
+        }
+
         if (inflationRate != null) {
           withdrawal *= 1 + inflationRate;
           baselineWithdrawal *= 1 + inflationRate;
@@ -521,6 +618,9 @@ export function runMonteCarloSimulation(
     }
 
     withdrawnTotals[sim] = withdrawnSum;
+    if (simDepletionYear !== Infinity) {
+      depletionYearBySim[sim] = simDepletionYear;
+    }
 
     if (!depleted) {
       survivedCount++;
@@ -596,6 +696,10 @@ export function runMonteCarloSimulation(
         ? depletionYears[depletionYears.length - 1]
         : null,
     worstRunPath,
+    endingBalances: balancesByYear[horizonYears].slice(),
+    depletionYearBySim,
+    totalWithdrawnBySim: withdrawnTotals,
+    runDetail,
     simulationCount,
     horizonYears,
   };
