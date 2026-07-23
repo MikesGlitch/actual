@@ -132,6 +132,41 @@ export type MonteCarloAllocationPreset =
 
 export type MonteCarloWithdrawalStrategy = 'proportional' | 'sequential';
 
+export type MonteCarloReturnModel =
+  | 'normal'
+  | 'historical-bootstrap'
+  | 'historical-sequence';
+
+export type MonteCarloWithdrawalRuleType =
+  | 'none'
+  | 'guardrails'
+  | 'ratcheting'
+  | 'floor-ceiling'
+  | 'boundaries';
+
+// Parameters for all rule types are kept side by side so switching between
+// rules in the UI preserves each rule's settings
+export type MonteCarloWithdrawalRuleMeta = {
+  type: MonteCarloWithdrawalRuleType;
+  // Guardrails (Guyton-Klinger)
+  prosperityTriggerPct?: number; // rate fell this fraction below initial
+  prosperityIncreasePct?: number;
+  preservationTriggerPct?: number; // rate rose this fraction above initial
+  preservationCutPct?: number;
+  // Ratcheting (Kitces)
+  balanceThresholdMultiple?: number; // e.g. 1.5x initial balance
+  consecutiveYears?: number;
+  ratchetIncreasePct?: number;
+  // Floor & ceiling (Bengen)
+  floorPct?: number; // fraction below the inflation-adjusted initial
+  ceilingPct?: number; // fraction above the inflation-adjusted initial
+  // Boundaries
+  upperRateThreshold?: number; // absolute withdrawal rate, e.g. 0.06
+  upperCutPct?: number;
+  lowerRateThreshold?: number;
+  lowerIncreasePct?: number;
+};
+
 export type MonteCarloPotMeta = {
   id: string;
   name?: string;
@@ -147,6 +182,10 @@ export type MonteCarloWidget = AbstractWidget<
     name?: string;
     pots?: MonteCarloPotMeta[];
     withdrawalStrategy?: MonteCarloWithdrawalStrategy;
+    returnModel?: MonteCarloReturnModel;
+    withdrawalRule?: MonteCarloWithdrawalRuleMeta;
+    /** Minimum annual withdrawal in minor units; 0 or absent = no floor */
+    minimumWithdrawal?: number;
     annualWithdrawal?: number; // integer minor units (cents)
     inflationRate?: number | null; // decimal fraction; null = flat withdrawals
     horizonYears?: number;

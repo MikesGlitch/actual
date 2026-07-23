@@ -4,6 +4,7 @@ import {
   MAX_HORIZON_YEARS,
   MIN_SIMULATION_COUNT,
   runMonteCarloSimulation,
+  WITHDRAWAL_RULE_DEFAULTS,
 } from './monteCarloSimulation';
 import type { MonteCarloParams, MonteCarloPot } from './monteCarloSimulation';
 
@@ -26,6 +27,9 @@ function makeParams(
   return {
     pots: [makePot(potOverrides)],
     withdrawalStrategy: 'proportional',
+    returnModel: 'normal',
+    withdrawalRule: WITHDRAWAL_RULE_DEFAULTS,
+    minimumWithdrawal: 0,
     annualWithdrawal: 2_000_000,
     inflationRate: null,
     horizonYears: 30,
@@ -304,6 +308,175 @@ describe('runMonteCarloSimulation', () => {
     // Draining the low-return pot first should always come out ahead here
     expect(sequential.medianEndingBalance).toBeGreaterThan(
       proportional.medianEndingBalance,
+    );
+  });
+
+  it('matches deterministic growth when bootstrapping a one-year history', () => {
+    // With a single historical year, every bootstrap draw is that year's
+    // return, so the run must match a zero-volatility 5% projection
+    const historical = runMonteCarloSimulation(
+      makeParams(
+        {
+          returnModel: 'historical-bootstrap',
+          historicalReturns: [
+            { year: 2000, stocks: 0.05, bonds: 0.02, cash: 0.01 },
+          ],
+          annualWithdrawal: 3_000,
+          horizonYears: 30,
+        },
+        { startingBalance: 100_000, allocationPreset: 'equity-100' },
+      ),
+    );
+    const deterministic = runMonteCarloSimulation(
+      makeParams(
+        { annualWithdrawal: 3_000, horizonYears: 30 },
+        {
+          startingBalance: 100_000,
+          expectedReturnMean: 0.05,
+          returnStdDev: 0,
+        },
+      ),
+    );
+    expect(historical.percentileBands).toEqual(deterministic.percentileBands);
+  });
+
+  it('runs one scenario per start year in sequence mode', () => {
+    const result = runMonteCarloSimulation(
+      makeParams(
+        {
+          returnModel: 'historical-sequence',
+          historicalReturns: [
+            { year: 2000, stocks: 1, bonds: 0, cash: 0 },
+            { year: 2001, stocks: -0.5, bonds: 0, cash: 0 },
+          ],
+          annualWithdrawal: 10,
+          horizonYears: 2,
+        },
+        { startingBalance: 100, allocationPreset: 'equity-100' },
+      ),
+    );
+
+    // start 2000: y1 (100-10)*2 = 180, y2 (180-10)*0.5 = 85
+    // start 2001: y1 (100-10)*0.5 = 45, y2 (45-10)*2 = 70
+    expect(result.simulationCount).toBe(2);
+    expect(result.successRate).toBe(1);
+    expect(result.percentileBands[2].p90).toBe(84);
+    expect(result.medianEndingBalance).toBe(78); // midpoint of 70 and 85
+  });
+
+  it('keeps custom pots on normal draws in historical modes', () => {
+    // An absurd history that would explode the balance if it were used
+    const historical = runMonteCarloSimulation(
+      makeParams(
+        {
+          returnModel: 'historical-bootstrap',
+          historicalReturns: [{ year: 2000, stocks: 9, bonds: 9, cash: 9 }],
+        },
+        { expectedReturnMean: 0.05, returnStdDev: 0 },
+      ),
+    );
+    const normal = runMonteCarloSimulation(
+      makeParams({}, { expectedReturnMean: 0.05, returnStdDev: 0 }),
+    );
+    expect(historical.percentileBands).toEqual(normal.percentileBands);
+  });
+
+  it('guardrails raise withdrawals when the pot races ahead', () => {
+    // 4% initial rate with steady 20% growth: the withdrawal rate quickly
+    // falls below 80% of the initial rate, triggering prosperity increases
+    const base = makeParams(
+      { annualWithdrawal: 4_000, horizonYears: 20 },
+      { startingBalance: 100_000, expectedReturnMean: 0.2, returnStdDev: 0 },
+    );
+    const withoutRule = runMonteCarloSimulation(base);
+    const withRule = runMonteCarloSimulation({
+      ...base,
+      withdrawalRule: { ...WITHDRAWAL_RULE_DEFAULTS, type: 'guardrails' },
+    });
+
+    expect(withoutRule.medianTotalWithdrawn).toBe(20 * 4_000);
+    expect(withRule.medianTotalWithdrawn).toBeGreaterThan(
+      withoutRule.medianTotalWithdrawn,
+    );
+    expect(withRule.successRate).toBe(1);
+  });
+
+  it('boundaries cut withdrawals and extend survival', () => {
+    // 10% withdrawal rate on a flat pot depletes in exactly year 10
+    const base = makeParams(
+      { annualWithdrawal: 10_000, horizonYears: 30 },
+      { startingBalance: 100_000, expectedReturnMean: 0, returnStdDev: 0 },
+    );
+    const withoutRule = runMonteCarloSimulation(base);
+    expect(withoutRule.medianDepletionYear).toBe(10);
+
+    const withRule = runMonteCarloSimulation({
+      ...base,
+      withdrawalRule: { ...WITHDRAWAL_RULE_DEFAULTS, type: 'boundaries' },
+    });
+    expect(withRule.medianDepletionYear ?? Infinity).toBeGreaterThan(10);
+    // The extra years come at the cost of income
+    expect(withRule.medianTotalWithdrawn).toBeLessThanOrEqual(100_000);
+  });
+
+  it('floor-ceiling scales withdrawals with the pot within limits', () => {
+    const base = makeParams(
+      { annualWithdrawal: 10_000, horizonYears: 30 },
+      { startingBalance: 100_000, expectedReturnMean: 0, returnStdDev: 0 },
+    );
+    const withRule = runMonteCarloSimulation({
+      ...base,
+      withdrawalRule: {
+        ...WITHDRAWAL_RULE_DEFAULTS,
+        type: 'floor-ceiling',
+        floorPct: 0.5,
+        ceilingPct: 0.5,
+      },
+    });
+
+    // Withdrawing ~10% of a shrinking pot (floored at 5,000/year) lasts far
+    // longer than a fixed 10,000/year, which dies in year 10
+    expect(withRule.medianDepletionYear ?? Infinity).toBeGreaterThan(14);
+  });
+
+  it('ratcheting increases withdrawals after consecutive years above the threshold', () => {
+    const base = makeParams(
+      { annualWithdrawal: 1_000, horizonYears: 20 },
+      { startingBalance: 100_000, expectedReturnMean: 0.3, returnStdDev: 0 },
+    );
+    const withoutRule = runMonteCarloSimulation(base);
+    const withRule = runMonteCarloSimulation({
+      ...base,
+      withdrawalRule: {
+        ...WITHDRAWAL_RULE_DEFAULTS,
+        type: 'ratcheting',
+        balanceThresholdMultiple: 1.5,
+        consecutiveYears: 3,
+        ratchetIncreasePct: 0.5,
+      },
+    });
+
+    expect(withoutRule.medianTotalWithdrawn).toBe(20 * 1_000);
+    expect(withRule.medianTotalWithdrawn).toBeGreaterThan(
+      withoutRule.medianTotalWithdrawn,
+    );
+  });
+
+  it('minimum withdrawal floor neutralizes rule cuts', () => {
+    const base = makeParams(
+      { annualWithdrawal: 10_000, horizonYears: 30 },
+      { startingBalance: 100_000, expectedReturnMean: 0, returnStdDev: 0 },
+    );
+    const withoutRule = runMonteCarloSimulation(base);
+    const cutsFloored = runMonteCarloSimulation({
+      ...base,
+      withdrawalRule: { ...WITHDRAWAL_RULE_DEFAULTS, type: 'boundaries' },
+      minimumWithdrawal: 10_000,
+    });
+
+    expect(cutsFloored.percentileBands).toEqual(withoutRule.percentileBands);
+    expect(cutsFloored.medianTotalWithdrawn).toBe(
+      withoutRule.medianTotalWithdrawn,
     );
   });
 

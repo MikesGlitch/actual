@@ -26,6 +26,7 @@ type MonteCarloNumberInputProps = {
   max: number;
   step?: number;
   placeholder?: string;
+  disabled?: boolean;
 };
 
 function toDisplayText(value: number | null, scale: number) {
@@ -42,6 +43,7 @@ export function MonteCarloNumberInput({
   max,
   step = 0.1,
   placeholder,
+  disabled = false,
 }: MonteCarloNumberInputProps) {
   const [text, setText] = useState(() => toDisplayText(value, scale));
   const [isFocused, setIsFocused] = useState(false);
@@ -92,6 +94,7 @@ export function MonteCarloNumberInput({
       step={step}
       value={text}
       placeholder={placeholder}
+      disabled={disabled}
       onChangeValue={setText}
       onFocus={() => setIsFocused(true)}
       onBlur={event => {

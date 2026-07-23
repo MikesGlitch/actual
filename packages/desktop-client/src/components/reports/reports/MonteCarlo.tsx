@@ -22,6 +22,7 @@ import type { MonteCarloGraphView } from '#components/reports/graphs/MonteCarloG
 import { MonteCarloHistogram } from '#components/reports/graphs/MonteCarloHistogram';
 import { LoadingIndicator } from '#components/reports/LoadingIndicator';
 import { MonteCarloConfiguration } from '#components/reports/reports/MonteCarloConfiguration';
+import { HISTORICAL_ANNUAL_RETURNS } from '#components/reports/reports/monteCarloHistoricalReturns';
 import {
   MONTE_CARLO_DEFAULTS,
   monteCarloConfigFromMeta,
@@ -34,6 +35,10 @@ import { useNavigate } from '#hooks/useNavigate';
 import { addNotification } from '#notifications/notificationsSlice';
 import { useDispatch } from '#redux';
 import { useUpdateDashboardWidgetMutation } from '#reports/mutations';
+
+const firstYear = HISTORICAL_ANNUAL_RETURNS[0].year;
+const lastYear =
+  HISTORICAL_ANNUAL_RETURNS[HISTORICAL_ANNUAL_RETURNS.length - 1].year;
 
 const STAT_HEADING_STYLE = {
   fontWeight: 600,
@@ -288,6 +293,18 @@ export function MonteCarlo() {
             </View>
             <View style={{ gap: 4 }}>
               <Text style={STAT_HEADING_STYLE}>
+                <Trans>Median total withdrawn</Trans>
+              </Text>
+              <Text style={{ ...styles.mediumText, fontWeight: 500 }}>
+                <PrivacyFilter>
+                  <FinancialText as="span">
+                    {format(result.medianTotalWithdrawn, 'financial')}
+                  </FinancialText>
+                </PrivacyFilter>
+              </Text>
+            </View>
+            <View style={{ gap: 4 }}>
+              <Text style={STAT_HEADING_STYLE}>
                 <Trans>Chance of running out of money</Trans>
               </Text>
               <Text style={{ ...styles.mediumText, fontWeight: 500 }}>
@@ -470,22 +487,43 @@ export function MonteCarlo() {
           </Text>
           <Paragraph>
             <Trans>
-              Each scenario replays your retirement with a different random
-              sequence of yearly investment returns, drawn around your expected
-              return and volatility. Every year the withdrawal is taken first,
-              then the remaining pot grows or shrinks with that year&apos;s
+              Each scenario replays your retirement with a different sequence of
+              yearly investment returns. Every year the withdrawal is taken
+              first, then each pot grows or shrinks with that year&apos;s
               return. The shaded bands show the range of outcomes across all
               scenarios: the darker band covers the middle half, and the lighter
               band covers 80% of them.
             </Trans>
           </Paragraph>
           <Paragraph>
-            <Trans>
-              Keep in mind this is a simplified model: returns are drawn
-              independently each year from a normal distribution, which ignores
-              sequence-of-returns clustering, fat tails, fees, and taxes. Treat
-              the results as a rough guide, not a guarantee.
-            </Trans>
+            {config.returnModel === 'normal' ? (
+              <Trans>
+                Keep in mind this is a simplified model: returns are drawn
+                independently each year from a normal distribution, which
+                ignores sequence-of-returns clustering, fat tails, fees, and
+                taxes. Treat the results as a rough guide, not a guarantee.
+              </Trans>
+            ) : config.returnModel === 'historical-bootstrap' ? (
+              <Trans>
+                Returns are actual US market years ({{ firstYear }}&ndash;
+                {{ lastYear }}, S&amp;P 500 / 10-year Treasuries / T-bills,
+                Damodaran data) drawn in random order for each pot&apos;s
+                allocation mix. Real crash years are included, but multi-year
+                momentum is lost by shuffling, fees and taxes are ignored, and
+                US history has been unusually good&mdash;results may be
+                optimistic for globally diversified portfolios.
+              </Trans>
+            ) : (
+              <Trans>
+                Each scenario replays actual US market history ({{ firstYear }}
+                &ndash;{{ lastYear }}, S&amp;P 500 / 10-year Treasuries /
+                T-bills, Damodaran data) starting from a different year,
+                wrapping around the end of the data. This preserves real crashes
+                and recoveries, but there are only as many scenarios as start
+                years, fees and taxes are ignored, and US history may be
+                optimistic for globally diversified portfolios.
+              </Trans>
+            )}
           </Paragraph>
         </View>
       </View>

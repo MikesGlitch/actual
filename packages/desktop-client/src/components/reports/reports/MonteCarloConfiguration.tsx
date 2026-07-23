@@ -10,7 +10,10 @@ import { Text } from '@actual-app/components/text';
 import { theme } from '@actual-app/components/theme';
 import { Tooltip } from '@actual-app/components/tooltip';
 import { View } from '@actual-app/components/view';
-import type { MonteCarloWithdrawalStrategy } from '@actual-app/core/types/models';
+import type {
+  MonteCarloReturnModel,
+  MonteCarloWithdrawalStrategy,
+} from '@actual-app/core/types/models';
 import { css } from '@emotion/css';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -32,6 +35,7 @@ import type {
   MonteCarloConfig,
   MonteCarloPot,
 } from '#components/reports/reports/monteCarloSimulation';
+import { MonteCarloWithdrawalRuleConfiguration } from '#components/reports/reports/MonteCarloWithdrawalRuleConfiguration';
 import { FinancialInput } from '#components/util/FinancialInput';
 
 const SECTION_TITLE_STYLE = {
@@ -129,6 +133,7 @@ export function MonteCarloConfiguration({
                 pot={pot}
                 potNumber={config.pots.indexOf(pot) + 1}
                 canRemove={config.pots.length > 1}
+                usesHistoricalReturns={config.returnModel !== 'normal'}
                 onPotChange={changes => onPotChange(pot.id, changes)}
                 onRemove={() =>
                   onConfigChange({
@@ -299,6 +304,18 @@ export function MonteCarloConfiguration({
               />
             </View>
           </View>
+          <MonteCarloWithdrawalRuleConfiguration
+            rule={config.withdrawalRule}
+            minimumWithdrawal={config.minimumWithdrawal}
+            onRuleChange={changes =>
+              onConfigChange({
+                withdrawalRule: { ...config.withdrawalRule, ...changes },
+              })
+            }
+            onMinimumWithdrawalChange={value =>
+              onConfigChange({ minimumWithdrawal: value })
+            }
+          />
         </View>
 
         {/* Simulation */}
@@ -307,6 +324,56 @@ export function MonteCarloConfiguration({
             <Trans>Simulation</Trans>
           </Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 20 }}>
+            <View style={{ width: 250 }}>
+              <View style={FIELD_LABEL_ROW_STYLE}>
+                <Text style={FIELD_LABEL_STYLE}>
+                  <Trans>Return model</Trans>
+                </Text>
+                <Tooltip
+                  content={
+                    <View style={{ maxWidth: 300 }}>
+                      <Text>
+                        <Trans>
+                          How each simulated year&apos;s investment return is
+                          generated.
+                          <br />
+                          <br />
+                          Random: drawn from a normal distribution around each
+                          pot&apos;s expected return and volatility.
+                          <br />
+                          <br />
+                          Historical, shuffled: drawn from actual US market
+                          years (1928 onwards) in random order.
+                          <br />
+                          <br />
+                          Historical sequences: replays real market history, one
+                          scenario per starting year. Pots with a Custom
+                          allocation always use their own return and volatility.
+                        </Trans>
+                      </Text>
+                    </View>
+                  }
+                  placement="bottom start"
+                  style={{ ...styles.tooltip }}
+                >
+                  <SvgQuestion height={12} width={12} cursor="pointer" />
+                </Tooltip>
+              </View>
+              <Select
+                value={config.returnModel}
+                onChange={value =>
+                  onConfigChange({
+                    returnModel: value as MonteCarloReturnModel,
+                  })
+                }
+                options={[
+                  ['normal', t('Random (normal distribution)')],
+                  ['historical-bootstrap', t('Historical returns, shuffled')],
+                  ['historical-sequence', t('Historical sequences (replay)')],
+                ]}
+              />
+            </View>
+
             <View style={FIELD_STYLE}>
               <View style={FIELD_LABEL_ROW_STYLE}>
                 <Text style={FIELD_LABEL_STYLE}>
@@ -335,6 +402,8 @@ export function MonteCarloConfiguration({
                 min={MIN_SIMULATION_COUNT}
                 max={MAX_SIMULATION_COUNT}
                 step={500}
+                // Sequence replay runs one scenario per historical start year
+                disabled={config.returnModel === 'historical-sequence'}
                 onCommit={newValue =>
                   onConfigChange({
                     simulationCount: newValue ?? MIN_SIMULATION_COUNT,

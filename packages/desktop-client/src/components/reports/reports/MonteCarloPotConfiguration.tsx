@@ -41,6 +41,8 @@ type MonteCarloPotConfigurationProps = ComponentPropsWithoutRef<
   pot: MonteCarloPot;
   potNumber: number;
   canRemove: boolean;
+  /** True when a historical return model is active */
+  usesHistoricalReturns: boolean;
   onPotChange: (changes: Partial<MonteCarloPot>) => void;
   onRemove: () => void;
 };
@@ -49,11 +51,17 @@ export function MonteCarloPotConfiguration({
   pot,
   potNumber,
   canRemove,
+  usesHistoricalReturns,
   onPotChange,
   onRemove,
   ...props
 }: MonteCarloPotConfigurationProps) {
   const { t } = useTranslation();
+
+  // Historical models derive this pot's returns from its allocation mix;
+  // the manual return/volatility only apply to Custom pots there
+  const isManualReturnDisabled =
+    usesHistoricalReturns && pot.allocationPreset !== 'custom';
 
   return (
     <GridListItem
@@ -204,6 +212,7 @@ export function MonteCarloPotConfiguration({
             scale={100}
             min={-100}
             max={100}
+            disabled={isManualReturnDisabled}
             onCommit={newValue =>
               onPotChange({
                 expectedReturnMean: newValue ?? 0,
@@ -242,6 +251,7 @@ export function MonteCarloPotConfiguration({
             scale={100}
             min={0}
             max={100}
+            disabled={isManualReturnDisabled}
             onCommit={newValue =>
               onPotChange({
                 returnStdDev: newValue ?? 0,
