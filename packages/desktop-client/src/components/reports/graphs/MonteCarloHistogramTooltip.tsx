@@ -6,6 +6,7 @@ import { css } from '@emotion/css';
 type PayloadItem = {
   payload: {
     year: number;
+    age: number;
     count: number;
   };
 };
@@ -37,14 +38,11 @@ export function MonteCarloHistogramTooltip({
           padding: 10,
         })}
       >
-        {t(
-          '{{count}} of {{total}} scenarios ran out of money in year {{year}}',
-          {
-            count: point.count,
-            total: simulationCount,
-            year: point.year,
-          },
-        )}
+        {t('{{count}} of {{total}} scenarios ran out of money at age {{age}}', {
+          count: point.count,
+          total: simulationCount,
+          age: point.age,
+        })}
       </div>
     );
   }

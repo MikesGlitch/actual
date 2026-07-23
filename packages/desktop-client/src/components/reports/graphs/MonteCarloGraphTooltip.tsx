@@ -17,6 +17,7 @@ export type MonteCarloGraphView =
 
 export type FanChartDataPoint = {
   year: number;
+  age: number;
   band80: [number, number];
   band50: [number, number];
   p5: number;
@@ -93,8 +94,8 @@ export function MonteCarloGraphTooltip({
         <div style={{ marginBottom: 10 }}>
           <strong>
             {point.year === 0
-              ? t('Start')
-              : t('Year {{year}}', { year: point.year })}
+              ? t('Start (age {{age}})', { age: point.age })
+              : t('Age {{age}}', { age: point.age })}
           </strong>
         </div>
         <div style={{ lineHeight: 1.5 }}>

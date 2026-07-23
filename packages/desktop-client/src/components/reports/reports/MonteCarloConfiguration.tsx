@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import type { DragItem } from 'react-aria';
 import { DropIndicator, GridList, useDragAndDrop } from 'react-aria-components';
 import { Trans, useTranslation } from 'react-i18next';
 
 import { Button } from '@actual-app/components/button';
 import { SvgAdd, SvgQuestion } from '@actual-app/components/icons/v1';
+import { ModeButton } from '@actual-app/components/mode-button';
 import { Select } from '@actual-app/components/select';
 import { styles } from '@actual-app/components/styles';
 import { Text } from '@actual-app/components/text';
@@ -26,10 +28,9 @@ import {
 } from '#components/reports/reports/MonteCarloPotConfiguration';
 import {
   createMonteCarloPot,
-  MAX_HORIZON_YEARS,
   MAX_SIMULATION_COUNT,
-  MIN_HORIZON_YEARS,
   MIN_SIMULATION_COUNT,
+  MONTE_CARLO_DEFAULTS,
 } from '#components/reports/reports/monteCarloSimulation';
 import type {
   MonteCarloConfig,
@@ -38,14 +39,7 @@ import type {
 import { MonteCarloWithdrawalRuleConfiguration } from '#components/reports/reports/MonteCarloWithdrawalRuleConfiguration';
 import { FinancialInput } from '#components/util/FinancialInput';
 
-const SECTION_TITLE_STYLE = {
-  fontWeight: 600,
-  marginBottom: 10,
-  color: theme.pageText,
-  textTransform: 'uppercase',
-  fontSize: 12,
-  letterSpacing: 0.5,
-} as const;
+type ConfigurationTab = 'plan' | 'pots' | 'withdrawals';
 
 type MonteCarloConfigurationProps = {
   config: MonteCarloConfig;
@@ -57,6 +51,7 @@ export function MonteCarloConfiguration({
   onConfigChange,
 }: MonteCarloConfigurationProps) {
   const { t } = useTranslation();
+  const [activeTab, setActiveTab] = useState<ConfigurationTab>('plan');
 
   function onPotChange(potId: string, changes: Partial<MonteCarloPot>) {
     onConfigChange({
@@ -108,15 +103,181 @@ export function MonteCarloConfiguration({
         backgroundColor: theme.tableBackground,
         padding: 20,
         flexShrink: 0,
-        gap: 25,
+        gap: 15,
       }}
     >
-      {/* Investment pots. Future settings like withdrawal rules or fees
-          belong in their own section alongside these. */}
-      <View>
-        <Text style={SECTION_TITLE_STYLE}>
+      {/* Tab bar */}
+      <View style={{ flexDirection: 'row', gap: 5 }}>
+        <ModeButton
+          selected={activeTab === 'plan'}
+          onSelect={() => setActiveTab('plan')}
+        >
+          <Trans>Plan details</Trans>
+        </ModeButton>
+        <ModeButton
+          selected={activeTab === 'pots'}
+          onSelect={() => setActiveTab('pots')}
+        >
           <Trans>Investment pots</Trans>
-        </Text>
+        </ModeButton>
+        <ModeButton
+          selected={activeTab === 'withdrawals'}
+          onSelect={() => setActiveTab('withdrawals')}
+        >
+          <Trans>Withdrawals</Trans>
+        </ModeButton>
+      </View>
+
+      <Text style={{ color: theme.pageText }}>
+        {activeTab === 'plan'
+          ? t(
+              'Who this plan is for and how the simulation generates market returns.',
+            )
+          : activeTab === 'pots'
+            ? t(
+                'The invested accounts your plan draws from - each with its own balance, allocation, and return assumptions.',
+              )
+            : t(
+                'How much you take out each year, and optional rules that adjust it as markets move.',
+              )}
+      </Text>
+
+      {/* Plan details */}
+      {activeTab === 'plan' && (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 20 }}>
+          <View style={FIELD_STYLE}>
+            <View style={FIELD_LABEL_ROW_STYLE}>
+              <Text style={FIELD_LABEL_STYLE}>
+                <Trans>Your current age</Trans>
+              </Text>
+            </View>
+            <MonteCarloNumberInput
+              value={config.currentAge}
+              roundToInteger
+              min={16}
+              max={119}
+              step={1}
+              onCommit={newValue =>
+                onConfigChange({
+                  currentAge: newValue ?? MONTE_CARLO_DEFAULTS.currentAge,
+                })
+              }
+            />
+          </View>
+
+          <View style={FIELD_STYLE}>
+            <View style={FIELD_LABEL_ROW_STYLE}>
+              <Text style={FIELD_LABEL_STYLE}>
+                <Trans>Pot must last until age</Trans>
+              </Text>
+            </View>
+            <MonteCarloNumberInput
+              value={config.targetAge}
+              roundToInteger
+              min={config.currentAge + 1}
+              max={120}
+              step={1}
+              onCommit={newValue =>
+                onConfigChange({
+                  targetAge: newValue ?? MONTE_CARLO_DEFAULTS.targetAge,
+                })
+              }
+            />
+          </View>
+
+          <View style={{ width: 250 }}>
+            <View style={FIELD_LABEL_ROW_STYLE}>
+              <Text style={FIELD_LABEL_STYLE}>
+                <Trans>Return model</Trans>
+              </Text>
+              <Tooltip
+                content={
+                  <View style={{ maxWidth: 300 }}>
+                    <Text>
+                      <Trans>
+                        How each simulated year&apos;s investment return is
+                        generated.
+                        <br />
+                        <br />
+                        Random: drawn from a normal distribution around each
+                        pot&apos;s expected return and volatility.
+                        <br />
+                        <br />
+                        Historical, shuffled: drawn from actual US market years
+                        (1928 onwards) in random order.
+                        <br />
+                        <br />
+                        Historical sequences: replays real market history, one
+                        scenario per starting year. Pots with a Custom
+                        allocation always use their own return and volatility.
+                      </Trans>
+                    </Text>
+                  </View>
+                }
+                placement="bottom start"
+                style={{ ...styles.tooltip }}
+              >
+                <SvgQuestion height={12} width={12} cursor="pointer" />
+              </Tooltip>
+            </View>
+            <Select
+              value={config.returnModel}
+              onChange={value =>
+                onConfigChange({
+                  returnModel: value as MonteCarloReturnModel,
+                })
+              }
+              options={[
+                ['normal', t('Random (normal distribution)')],
+                ['historical-bootstrap', t('Historical returns, shuffled')],
+                ['historical-sequence', t('Historical sequences (replay)')],
+              ]}
+            />
+          </View>
+
+          <View style={FIELD_STYLE}>
+            <View style={FIELD_LABEL_ROW_STYLE}>
+              <Text style={FIELD_LABEL_STYLE}>
+                <Trans>Simulations</Trans>
+              </Text>
+              <Tooltip
+                content={
+                  <View style={{ maxWidth: 300 }}>
+                    <Text>
+                      <Trans>
+                        How many random scenarios to run. More simulations give
+                        a steadier result but take slightly longer.
+                      </Trans>
+                    </Text>
+                  </View>
+                }
+                placement="bottom start"
+                style={{ ...styles.tooltip }}
+              >
+                <SvgQuestion height={12} width={12} cursor="pointer" />
+              </Tooltip>
+            </View>
+            <MonteCarloNumberInput
+              value={config.simulationCount}
+              roundToInteger
+              min={MIN_SIMULATION_COUNT}
+              max={MAX_SIMULATION_COUNT}
+              step={500}
+              // Sequence replay runs one scenario per historical start year
+              disabled={config.returnModel === 'historical-sequence'}
+              onCommit={newValue =>
+                onConfigChange({
+                  simulationCount: newValue ?? MIN_SIMULATION_COUNT,
+                })
+              }
+            />
+          </View>
+        </View>
+      )}
+
+      {/* Investment pots. Future settings like fees belong in their own
+          tab alongside these. */}
+      {activeTab === 'pots' && (
         <View>
           <GridList
             aria-label={t('Investment pots')}
@@ -156,35 +317,38 @@ export function MonteCarloConfiguration({
             </Button>
           </View>
         </View>
-      </View>
+      )}
 
-      <View
-        style={{
-          flexDirection: 'row',
-          flexWrap: 'wrap',
-          gap: 40,
-          rowGap: 25,
-        }}
-      >
-        {/* Withdrawals */}
+      {/* Withdrawals */}
+      {activeTab === 'withdrawals' && (
         <View>
-          <Text style={SECTION_TITLE_STYLE}>
-            <Trans>Withdrawals</Trans>
-          </Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 20 }}>
             <View style={FIELD_STYLE}>
               <View style={FIELD_LABEL_ROW_STYLE}>
                 <Text style={FIELD_LABEL_STYLE}>
-                  <Trans>Annual withdrawal</Trans>
+                  {config.withdrawalRule.type !== 'none' ? (
+                    <Trans>First-year withdrawal</Trans>
+                  ) : (
+                    <Trans>Annual withdrawal</Trans>
+                  )}
                 </Text>
                 <Tooltip
                   content={
                     <View style={{ maxWidth: 300 }}>
                       <Text>
-                        <Trans>
-                          How much you take out of your pots each year to live
-                          on. This is what depletes them over time.
-                        </Trans>
+                        {config.withdrawalRule.type !== 'none' ? (
+                          <Trans>
+                            How much you take out in the first year. Because a
+                            withdrawal rule is active, later years are adjusted
+                            by the rule (plus inflation), separately in every
+                            scenario.
+                          </Trans>
+                        ) : (
+                          <Trans>
+                            How much you take out of your pots each year to live
+                            on. This is what depletes them over time.
+                          </Trans>
+                        )}
                       </Text>
                     </View>
                   }
@@ -221,7 +385,11 @@ export function MonteCarloConfiguration({
                           <br />
                           <br />
                           In pot order: drain the first pot before touching the
-                          next, in the order listed above.
+                          next, in the order listed on the Investment pots tab.
+                          <br />
+                          <br />
+                          Pots that haven&apos;t reached their access age yet
+                          are skipped until they unlock.
                         </Trans>
                       </Text>
                     </View>
@@ -283,26 +451,6 @@ export function MonteCarloConfiguration({
                 }
               />
             </View>
-
-            <View style={FIELD_STYLE}>
-              <View style={FIELD_LABEL_ROW_STYLE}>
-                <Text style={FIELD_LABEL_STYLE}>
-                  <Trans>Time horizon (years)</Trans>
-                </Text>
-              </View>
-              <MonteCarloNumberInput
-                value={config.horizonYears}
-                roundToInteger
-                min={MIN_HORIZON_YEARS}
-                max={MAX_HORIZON_YEARS}
-                step={1}
-                onCommit={newValue =>
-                  onConfigChange({
-                    horizonYears: newValue ?? MIN_HORIZON_YEARS,
-                  })
-                }
-              />
-            </View>
           </View>
           <MonteCarloWithdrawalRuleConfiguration
             rule={config.withdrawalRule}
@@ -317,103 +465,7 @@ export function MonteCarloConfiguration({
             }
           />
         </View>
-
-        {/* Simulation */}
-        <View>
-          <Text style={SECTION_TITLE_STYLE}>
-            <Trans>Simulation</Trans>
-          </Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 20 }}>
-            <View style={{ width: 250 }}>
-              <View style={FIELD_LABEL_ROW_STYLE}>
-                <Text style={FIELD_LABEL_STYLE}>
-                  <Trans>Return model</Trans>
-                </Text>
-                <Tooltip
-                  content={
-                    <View style={{ maxWidth: 300 }}>
-                      <Text>
-                        <Trans>
-                          How each simulated year&apos;s investment return is
-                          generated.
-                          <br />
-                          <br />
-                          Random: drawn from a normal distribution around each
-                          pot&apos;s expected return and volatility.
-                          <br />
-                          <br />
-                          Historical, shuffled: drawn from actual US market
-                          years (1928 onwards) in random order.
-                          <br />
-                          <br />
-                          Historical sequences: replays real market history, one
-                          scenario per starting year. Pots with a Custom
-                          allocation always use their own return and volatility.
-                        </Trans>
-                      </Text>
-                    </View>
-                  }
-                  placement="bottom start"
-                  style={{ ...styles.tooltip }}
-                >
-                  <SvgQuestion height={12} width={12} cursor="pointer" />
-                </Tooltip>
-              </View>
-              <Select
-                value={config.returnModel}
-                onChange={value =>
-                  onConfigChange({
-                    returnModel: value as MonteCarloReturnModel,
-                  })
-                }
-                options={[
-                  ['normal', t('Random (normal distribution)')],
-                  ['historical-bootstrap', t('Historical returns, shuffled')],
-                  ['historical-sequence', t('Historical sequences (replay)')],
-                ]}
-              />
-            </View>
-
-            <View style={FIELD_STYLE}>
-              <View style={FIELD_LABEL_ROW_STYLE}>
-                <Text style={FIELD_LABEL_STYLE}>
-                  <Trans>Simulations</Trans>
-                </Text>
-                <Tooltip
-                  content={
-                    <View style={{ maxWidth: 300 }}>
-                      <Text>
-                        <Trans>
-                          How many random scenarios to run. More simulations
-                          give a steadier result but take slightly longer.
-                        </Trans>
-                      </Text>
-                    </View>
-                  }
-                  placement="bottom start"
-                  style={{ ...styles.tooltip }}
-                >
-                  <SvgQuestion height={12} width={12} cursor="pointer" />
-                </Tooltip>
-              </View>
-              <MonteCarloNumberInput
-                value={config.simulationCount}
-                roundToInteger
-                min={MIN_SIMULATION_COUNT}
-                max={MAX_SIMULATION_COUNT}
-                step={500}
-                // Sequence replay runs one scenario per historical start year
-                disabled={config.returnModel === 'historical-sequence'}
-                onCommit={newValue =>
-                  onConfigChange({
-                    simulationCount: newValue ?? MIN_SIMULATION_COUNT,
-                  })
-                }
-              />
-            </View>
-          </View>
-        </View>
-      </View>
+      )}
     </View>
   );
 }

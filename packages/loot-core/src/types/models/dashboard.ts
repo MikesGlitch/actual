@@ -174,6 +174,8 @@ export type MonteCarloPotMeta = {
   allocationPreset?: MonteCarloAllocationPreset;
   expectedReturnMean?: number; // decimal fraction (0.06 = 6%)
   returnStdDev?: number; // decimal fraction
+  /** Age from which the pot can fund withdrawals; null = immediately */
+  accessAge?: number | null;
 };
 
 export type MonteCarloWidget = AbstractWidget<
@@ -188,7 +190,9 @@ export type MonteCarloWidget = AbstractWidget<
     minimumWithdrawal?: number;
     annualWithdrawal?: number; // integer minor units (cents)
     inflationRate?: number | null; // decimal fraction; null = flat withdrawals
-    horizonYears?: number;
+    currentAge?: number;
+    /** Age the pot must last to; the horizon is targetAge - currentAge */
+    targetAge?: number;
     simulationCount?: number;
   } | null
 >;

@@ -36,6 +36,8 @@ const VIEW_DATA_KEYS: Record<
 type MonteCarloGraphProps = {
   style?: CSSProperties;
   percentileBands: MonteCarloPercentileBand[];
+  /** The user's current age; the x-axis shows startAge + year */
+  startAge: number;
   worstRunPath?: number[];
   view?: MonteCarloGraphView;
   compact?: boolean;
@@ -45,6 +47,7 @@ type MonteCarloGraphProps = {
 export function MonteCarloGraph({
   style,
   percentileBands,
+  startAge,
   worstRunPath,
   view = 'all',
   compact = false,
@@ -56,6 +59,7 @@ export function MonteCarloGraph({
 
   const data: FanChartDataPoint[] = percentileBands.map(band => ({
     year: band.year,
+    age: startAge + band.year,
     band80: [band.p10, band.p90],
     band50: [band.p25, band.p75],
     p5: band.p5,
@@ -102,7 +106,7 @@ export function MonteCarloGraph({
         >
           {!compact && <CartesianGrid strokeDasharray="3 3" />}
           <XAxis
-            dataKey="year"
+            dataKey="age"
             hide={compact}
             tick={{ fill: theme.pageText }}
             tickLine={{ stroke: theme.pageText }}

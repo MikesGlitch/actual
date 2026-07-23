@@ -261,6 +261,44 @@ export function MonteCarloPotConfiguration({
           />
         </View>
 
+        <View style={FIELD_STYLE}>
+          <View style={FIELD_LABEL_ROW_STYLE}>
+            <Text style={FIELD_LABEL_STYLE}>
+              <Trans>Accessible from age</Trans>
+            </Text>
+            <Tooltip
+              content={
+                <View style={{ maxWidth: 300 }}>
+                  <Text>
+                    <Trans>
+                      Some pots can't be touched until a certain age - e.g.
+                      personal pensions. Until then the pot stays invested and
+                      keeps growing, but can't fund withdrawals.
+                      <br />
+                      <br />
+                      Leave blank if the pot is available now.
+                    </Trans>
+                  </Text>
+                </View>
+              }
+              placement="bottom start"
+              style={{ ...styles.tooltip }}
+            >
+              <SvgQuestion height={12} width={12} cursor="pointer" />
+            </Tooltip>
+          </View>
+          <MonteCarloNumberInput
+            value={pot.accessAge}
+            allowEmpty
+            roundToInteger
+            min={16}
+            max={120}
+            step={1}
+            placeholder={t('Immediately')}
+            onCommit={newValue => onPotChange({ accessAge: newValue })}
+          />
+        </View>
+
         {canRemove && (
           <Button
             variant="bare"

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  getMonteCarloHorizonYears,
   MAX_HORIZON_YEARS,
+  MIN_HORIZON_YEARS,
   MIN_SIMULATION_COUNT,
   runMonteCarloSimulation,
   WITHDRAWAL_RULE_DEFAULTS,
@@ -16,6 +18,7 @@ function makePot(overrides: Partial<MonteCarloPot> = {}): MonteCarloPot {
     allocationPreset: 'custom',
     expectedReturnMean: 0.06,
     returnStdDev: 0.1,
+    accessAge: null,
     ...overrides,
   };
 }
@@ -30,6 +33,7 @@ function makeParams(
     returnModel: 'normal',
     withdrawalRule: WITHDRAWAL_RULE_DEFAULTS,
     minimumWithdrawal: 0,
+    currentAge: 60,
     annualWithdrawal: 2_000_000,
     inflationRate: null,
     horizonYears: 30,
@@ -62,6 +66,29 @@ function deterministicDepletionYear(
   }
   return null;
 }
+
+describe('getMonteCarloHorizonYears', () => {
+  it('derives the horizon from the configured ages', () => {
+    expect(getMonteCarloHorizonYears({ currentAge: 60, targetAge: 90 })).toBe(
+      30,
+    );
+    expect(getMonteCarloHorizonYears({ currentAge: 62.4, targetAge: 90 })).toBe(
+      28,
+    );
+  });
+
+  it('clamps degenerate and oversized ranges', () => {
+    expect(getMonteCarloHorizonYears({ currentAge: 90, targetAge: 60 })).toBe(
+      MIN_HORIZON_YEARS,
+    );
+    expect(getMonteCarloHorizonYears({ currentAge: 70, targetAge: 70 })).toBe(
+      MIN_HORIZON_YEARS,
+    );
+    expect(getMonteCarloHorizonYears({ currentAge: 0, targetAge: 500 })).toBe(
+      MAX_HORIZON_YEARS,
+    );
+  });
+});
 
 describe('runMonteCarloSimulation', () => {
   it('matches the closed-form depletion year with zero volatility', () => {
@@ -478,6 +505,103 @@ describe('runMonteCarloSimulation', () => {
     expect(cutsFloored.medianTotalWithdrawn).toBe(
       withoutRule.medianTotalWithdrawn,
     );
+  });
+
+  it('fails when accessible pots run dry before a locked pot unlocks', () => {
+    // Current age 60; the big pot only unlocks at 120, far past the horizon.
+    // The accessible pot funds 30/year from 100: y1 70, y2 40, y3 10, then
+    // year 4 can't be covered - the locked money doesn't save the plan.
+    const result = runMonteCarloSimulation(
+      makeParams({
+        pots: [
+          makePot({
+            id: 'isa',
+            startingBalance: 100,
+            expectedReturnMean: 0,
+            returnStdDev: 0,
+          }),
+          makePot({
+            id: 'pension',
+            startingBalance: 1_000,
+            expectedReturnMean: 0,
+            returnStdDev: 0,
+            accessAge: 120,
+          }),
+        ],
+        annualWithdrawal: 30,
+        horizonYears: 20,
+      }),
+    );
+
+    expect(result.successRate).toBe(0);
+    expect(result.medianDepletionYear).toBe(4);
+  });
+
+  it('survives when the locked pot unlocks in time', () => {
+    // Same setup, but the pension unlocks at 63 - exactly year 4, just as
+    // the accessible pot runs out
+    const result = runMonteCarloSimulation(
+      makeParams({
+        pots: [
+          makePot({
+            id: 'isa',
+            startingBalance: 100,
+            expectedReturnMean: 0,
+            returnStdDev: 0,
+          }),
+          makePot({
+            id: 'pension',
+            startingBalance: 1_000,
+            expectedReturnMean: 0,
+            returnStdDev: 0,
+            accessAge: 63,
+          }),
+        ],
+        annualWithdrawal: 30,
+        horizonYears: 20,
+      }),
+    );
+
+    expect(result.successRate).toBe(1);
+  });
+
+  it('treats an access age at or below the current age as immediate', () => {
+    const immediate = runMonteCarloSimulation(
+      makeParams({}, { accessAge: null }),
+    );
+    const alreadyReached = runMonteCarloSimulation(
+      makeParams({}, { accessAge: 40 }),
+    );
+    expect(alreadyReached).toEqual(immediate);
+  });
+
+  it('sequential order skips locked pots until they unlock', () => {
+    // The first-listed pot is locked past the horizon, so sequential
+    // withdrawals drain the second pot: 100 at 10/year fails in year 10
+    const result = runMonteCarloSimulation(
+      makeParams({
+        withdrawalStrategy: 'sequential',
+        pots: [
+          makePot({
+            id: 'locked-first',
+            startingBalance: 1_000,
+            expectedReturnMean: 0,
+            returnStdDev: 0,
+            accessAge: 120,
+          }),
+          makePot({
+            id: 'open-second',
+            startingBalance: 100,
+            expectedReturnMean: 0,
+            returnStdDev: 0,
+          }),
+        ],
+        annualWithdrawal: 10,
+        horizonYears: 20,
+      }),
+    );
+
+    expect(result.medianDepletionYear).toBe(10);
   });
 
   it('clamps out-of-range inputs', () => {

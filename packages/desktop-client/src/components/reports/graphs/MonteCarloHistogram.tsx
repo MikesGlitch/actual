@@ -17,6 +17,8 @@ import { MonteCarloHistogramTooltip } from '#components/reports/graphs/MonteCarl
 type MonteCarloHistogramProps = {
   style?: CSSProperties;
   depletionHistogram: Array<{ year: number; count: number }>;
+  /** The user's current age; the x-axis shows startAge + year */
+  startAge: number;
   medianDepletionYear: number | null;
   simulationCount: number;
   showTooltip?: boolean;
@@ -25,11 +27,17 @@ type MonteCarloHistogramProps = {
 export function MonteCarloHistogram({
   style,
   depletionHistogram,
+  startAge,
   medianDepletionYear,
   simulationCount,
   showTooltip = true,
 }: MonteCarloHistogramProps) {
   const animationProps = useRechartsAnimation({ animationDuration: 1000 });
+
+  const data = depletionHistogram.map(entry => ({
+    ...entry,
+    age: startAge + entry.year,
+  }));
 
   return (
     <Container style={style}>
@@ -37,12 +45,12 @@ export function MonteCarloHistogram({
         <BarChart
           width={width}
           height={height}
-          data={depletionHistogram}
+          data={data}
           margin={{ top: 15, right: 0, left: 20, bottom: 10 }}
         >
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis
-            dataKey="year"
+            dataKey="age"
             tick={{ fill: theme.pageText }}
             tickLine={{ stroke: theme.pageText }}
           />
@@ -62,7 +70,7 @@ export function MonteCarloHistogram({
           )}
           {medianDepletionYear != null && (
             <ReferenceLine
-              x={medianDepletionYear}
+              x={startAge + medianDepletionYear}
               stroke={theme.noticeText}
               strokeDasharray="4 4"
             />

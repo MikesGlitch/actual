@@ -14,6 +14,7 @@ import { MonteCarloGraph } from '#components/reports/graphs/MonteCarloGraph';
 import { ReportCard } from '#components/reports/ReportCard';
 import { ReportCardName } from '#components/reports/ReportCardName';
 import {
+  getMonteCarloHorizonYears,
   monteCarloConfigFromMeta,
   runMonteCarloSimulation,
 } from '#components/reports/reports/monteCarloSimulation';
@@ -37,8 +38,13 @@ export function MonteCarloCard({
   const [nameMenuOpen, setNameMenuOpen] = useState(false);
   const [isCardHovered, setIsCardHovered] = useState(false);
 
-  const result = runMonteCarloSimulation(monteCarloConfigFromMeta(meta));
+  const config = monteCarloConfigFromMeta(meta);
+  const result = runMonteCarloSimulation({
+    ...config,
+    horizonYears: getMonteCarloHorizonYears(config),
+  });
 
+  const endAge = config.currentAge + result.horizonYears;
   const successPercent = Math.round(result.successRate * 1000) / 10;
 
   return (
@@ -87,15 +93,14 @@ export function MonteCarloCard({
                 color: theme.pageTextSubdued,
               }}
             >
-              <Trans>
-                Success rate over {{ years: result.horizonYears }} years
-              </Trans>
+              <Trans>Success rate to age {{ age: endAge }}</Trans>
             </Block>
           </View>
         </View>
 
         <MonteCarloGraph
           percentileBands={result.percentileBands}
+          startAge={config.currentAge}
           compact
           showTooltip={!isEditing && !isNarrowWidth}
           style={{ height: 'auto', flex: 1 }}

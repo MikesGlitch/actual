@@ -54,6 +54,8 @@ export type MonteCarloPot = {
   allocationPreset: MonteCarloAllocationPreset;
   expectedReturnMean: number; // decimal fraction
   returnStdDev: number; // decimal fraction
+  /** Age from which the pot can fund withdrawals; null = immediately */
+  accessAge: number | null;
 };
 
 export function createMonteCarloPot(id: string): MonteCarloPot {
@@ -64,6 +66,7 @@ export function createMonteCarloPot(id: string): MonteCarloPot {
     allocationPreset: 'equity-60',
     expectedReturnMean: ALLOCATION_PRESETS['equity-60'].mean,
     returnStdDev: ALLOCATION_PRESETS['equity-60'].stdDev,
+    accessAge: null,
   };
 }
 
@@ -112,7 +115,9 @@ export type MonteCarloConfig = {
   minimumWithdrawal: number;
   annualWithdrawal: number;
   inflationRate: number | null;
-  horizonYears: number;
+  currentAge: number;
+  /** Age the pot must last to; the horizon is targetAge - currentAge */
+  targetAge: number;
   simulationCount: number;
 };
 
@@ -124,9 +129,21 @@ export const MONTE_CARLO_DEFAULTS: MonteCarloConfig = {
   minimumWithdrawal: 0,
   annualWithdrawal: 2_000_000, // 20,000.00 in minor units
   inflationRate: 0.025,
-  horizonYears: 30,
+  currentAge: 60,
+  targetAge: 90,
   simulationCount: 5000,
 };
+
+/** Simulated years, derived from the configured ages */
+export function getMonteCarloHorizonYears(
+  config: Pick<MonteCarloConfig, 'currentAge' | 'targetAge'>,
+): number {
+  return clamp(
+    Math.round(config.targetAge - config.currentAge),
+    MIN_HORIZON_YEARS,
+    MAX_HORIZON_YEARS,
+  );
+}
 
 function potFromMeta(potMeta: MonteCarloPotMeta, index: number): MonteCarloPot {
   const defaults = createMonteCarloPot(potMeta.id || `pot-${index + 1}`);
@@ -138,6 +155,8 @@ function potFromMeta(potMeta: MonteCarloPotMeta, index: number): MonteCarloPot {
     expectedReturnMean:
       potMeta.expectedReturnMean ?? defaults.expectedReturnMean,
     returnStdDev: potMeta.returnStdDev ?? defaults.returnStdDev,
+    accessAge:
+      potMeta.accessAge !== undefined ? potMeta.accessAge : defaults.accessAge,
   };
 }
 
@@ -160,13 +179,18 @@ export function monteCarloConfigFromMeta(
       meta?.inflationRate !== undefined
         ? meta.inflationRate
         : MONTE_CARLO_DEFAULTS.inflationRate,
-    horizonYears: meta?.horizonYears ?? MONTE_CARLO_DEFAULTS.horizonYears,
+    currentAge: meta?.currentAge ?? MONTE_CARLO_DEFAULTS.currentAge,
+    targetAge: meta?.targetAge ?? MONTE_CARLO_DEFAULTS.targetAge,
     simulationCount:
       meta?.simulationCount ?? MONTE_CARLO_DEFAULTS.simulationCount,
   };
 }
 
-export type MonteCarloParams = MonteCarloConfig & {
+// The engine mostly thinks in years; callers derive horizonYears from the
+// configured ages via getMonteCarloHorizonYears. currentAge is still needed
+// to know when each pot's access age is reached.
+export type MonteCarloParams = Omit<MonteCarloConfig, 'targetAge'> & {
+  horizonYears: number;
   seed?: number;
   /** Override the bundled historical dataset (used in tests) */
   historicalReturns?: HistoricalAnnualReturn[];
@@ -255,9 +279,10 @@ function percentileOfSorted(sorted: Float64Array, p: number) {
  * Runs the drawdown simulation with i.i.d. normal annual returns.
  *
  * Each year, in each simulation: the withdrawal is taken at the start of the
- * year across all pots (proportionally to their balances, or draining pots in
- * order); if the pots together can't cover it the simulation is marked
- * depleted for that year (balances clamped to 0 for the rest of the path);
+ * year across the pots that have reached their access age (proportionally to
+ * their balances, or draining pots in order); if the accessible pots can't
+ * cover it the simulation is marked depleted for that year (balances clamped
+ * to 0 for the rest of the path), even if locked pots still hold money;
  * otherwise each pot gets its own randomly drawn return for the year. When an
  * inflation rate is set, next year's withdrawal grows by it. Returns are
  * nominal - inflation only grows withdrawals, so it is never double-counted.
@@ -272,6 +297,14 @@ export function runMonteCarloSimulation(
   const potMeans = pots.map(pot => pot.expectedReturnMean);
   const potStdDevs = pots.map(pot => Math.max(0, pot.returnStdDev));
   const isSequential = params.withdrawalStrategy === 'sequential';
+
+  // First simulation year (1-based) in which each pot can fund withdrawals.
+  // The year-y withdrawal happens at age currentAge + (y - 1).
+  const potAccessFromYear = pots.map(pot =>
+    pot.accessAge == null
+      ? 1
+      : Math.max(1, Math.round(pot.accessAge - params.currentAge) + 1),
+  );
 
   const returnModel = params.returnModel;
   const history = params.historicalReturns?.length
@@ -397,10 +430,22 @@ export function runMonteCarloSimulation(
           withdrawal = minimumWithdrawal;
         }
 
-        if (total <= withdrawal) {
-          // The pots together can't cover this year's withdrawal; they get
-          // whatever was left
-          withdrawnSum += total;
+        // Only pots that have reached their access age can fund this year's
+        // withdrawal; locked pots stay invested but untouchable
+        let accessibleTotal = 0;
+        let lastAccessibleIndex = -1;
+        for (let p = 0; p < potCount; p++) {
+          if (year >= potAccessFromYear[p]) {
+            accessibleTotal += potBalances[p];
+            lastAccessibleIndex = p;
+          }
+        }
+
+        if (accessibleTotal <= withdrawal) {
+          // The accessible pots can't cover this year's withdrawal (locked
+          // pots may still hold money, but the plan failed to fund spending);
+          // they get whatever was reachable
+          withdrawnSum += accessibleTotal;
           potBalances.fill(0);
           total = 0;
           depleted = true;
@@ -411,20 +456,27 @@ export function runMonteCarloSimulation(
           if (isSequential) {
             let remaining = withdrawal;
             for (let p = 0; p < potCount && remaining > 0; p++) {
+              if (year < potAccessFromYear[p]) {
+                continue;
+              }
               const take = Math.min(potBalances[p], remaining);
               potBalances[p] -= take;
               remaining -= take;
             }
           } else {
-            // Proportional split; the last pot takes the remainder so the
-            // total drops by exactly the withdrawal (no float drift)
+            // Proportional split across accessible pots; the last accessible
+            // pot takes the remainder so the total drops by exactly the
+            // withdrawal (no float drift)
             let remaining = withdrawal;
-            for (let p = 0; p < potCount - 1; p++) {
-              const take = withdrawal * (potBalances[p] / total);
+            for (let p = 0; p < lastAccessibleIndex; p++) {
+              if (year < potAccessFromYear[p]) {
+                continue;
+              }
+              const take = withdrawal * (potBalances[p] / accessibleTotal);
               potBalances[p] -= take;
               remaining -= take;
             }
-            potBalances[potCount - 1] -= remaining;
+            potBalances[lastAccessibleIndex] -= remaining;
           }
 
           // Pick this year's historical year once so all pots experience

@@ -24,6 +24,7 @@ import { LoadingIndicator } from '#components/reports/LoadingIndicator';
 import { MonteCarloConfiguration } from '#components/reports/reports/MonteCarloConfiguration';
 import { HISTORICAL_ANNUAL_RETURNS } from '#components/reports/reports/monteCarloHistoricalReturns';
 import {
+  getMonteCarloHorizonYears,
   MONTE_CARLO_DEFAULTS,
   monteCarloConfigFromMeta,
   runMonteCarloSimulation,
@@ -150,8 +151,14 @@ export function MonteCarlo() {
     return <LoadingIndicator />;
   }
 
-  const result = runMonteCarloSimulation(config);
+  const result = runMonteCarloSimulation({
+    ...config,
+    horizonYears: getMonteCarloHorizonYears(config),
+  });
 
+  // The age the simulation actually runs to (differs from targetAge only
+  // when the configured ages produce a clamped horizon)
+  const endAge = config.currentAge + result.horizonYears;
   const successPercent = Math.round(result.successRate * 1000) / 10;
   const depletionPercent = Math.round((1 - result.successRate) * 1000) / 10;
   const failedCount = result.depletionHistogram.reduce(
@@ -314,10 +321,12 @@ export function MonteCarlo() {
             {result.medianDepletionYear != null && (
               <View style={{ gap: 4 }}>
                 <Text style={STAT_HEADING_STYLE}>
-                  <Trans>Typical failure runs out in</Trans>
+                  <Trans>Typical failure runs out at</Trans>
                 </Text>
                 <Text style={{ ...styles.mediumText, fontWeight: 500 }}>
-                  {t('Year {{year}}', { year: result.medianDepletionYear })}
+                  {t('Age {{age}}', {
+                    age: config.currentAge + result.medianDepletionYear,
+                  })}
                 </Text>
               </View>
             )}
@@ -328,11 +337,11 @@ export function MonteCarlo() {
             </Text>
             <Text>
               {t(
-                'In {{successPercent}}% of {{simulationCount}} simulated scenarios, your pot lasted the full {{horizonYears}} years.',
+                'In {{successPercent}}% of {{simulationCount}} simulated scenarios, your pot lasted until age {{endAge}}.',
                 {
                   successPercent,
                   simulationCount: result.simulationCount,
-                  horizonYears: result.horizonYears,
+                  endAge,
                 },
               )}
             </Text>
@@ -380,7 +389,7 @@ export function MonteCarlo() {
           {graphView !== 'all' && (
             <Text
               style={{
-                color: theme.pageTextSubdued,
+                color: theme.pageText,
                 marginBottom: 10,
                 flexShrink: 0,
               }}
@@ -401,6 +410,7 @@ export function MonteCarlo() {
           )}
           <MonteCarloGraph
             percentileBands={result.percentileBands}
+            startAge={config.currentAge}
             worstRunPath={result.worstRunPath}
             view={graphView}
             style={{ height: '100%', flex: 1 }}
@@ -426,7 +436,7 @@ export function MonteCarlo() {
           </Text>
           {hasFailures ? (
             <>
-              <Text style={{ color: theme.pageTextSubdued, marginBottom: 10 }}>
+              <Text style={{ color: theme.pageText, marginBottom: 10 }}>
                 {t(
                   'Only the {{failedCount}} of {{simulationCount}} scenarios that ran out of money are shown here - the other {{survivedCount}} kept a positive balance for the full horizon.',
                   {
@@ -439,19 +449,23 @@ export function MonteCarlo() {
               <View style={{ height: 200, flexShrink: 0 }}>
                 <MonteCarloHistogram
                   depletionHistogram={result.depletionHistogram}
+                  startAge={config.currentAge}
                   medianDepletionYear={result.medianDepletionYear}
                   simulationCount={result.simulationCount}
                   style={{ height: 200 }}
                 />
               </View>
               <View style={{ marginTop: 10, flexShrink: 0 }}>
-                <Text style={{ color: theme.pageTextSubdued }}>
+                <Text style={{ color: theme.pageText }}>
                   {t(
-                    'Worst case: money ran out in year {{worst}}. Among failures, the typical depletion year was {{median}}; the luckiest failure lasted until year {{best}}.',
+                    'Worst case: money ran out at age {{worst}}. Among failures, the typical depletion age was {{median}}; the luckiest failure lasted until age {{best}}.',
                     {
-                      worst: result.earliestDepletionYear,
-                      median: result.medianDepletionYear,
-                      best: result.latestDepletionYear,
+                      worst:
+                        config.currentAge + (result.earliestDepletionYear ?? 0),
+                      median:
+                        config.currentAge + (result.medianDepletionYear ?? 0),
+                      best:
+                        config.currentAge + (result.latestDepletionYear ?? 0),
                     },
                   )}
                 </Text>
@@ -490,9 +504,12 @@ export function MonteCarlo() {
               Each scenario replays your retirement with a different sequence of
               yearly investment returns. Every year the withdrawal is taken
               first, then each pot grows or shrinks with that year&apos;s
-              return. The shaded bands show the range of outcomes across all
-              scenarios: the darker band covers the middle half, and the lighter
-              band covers 80% of them.
+              return. Pots with an access age stay invested but can&apos;t fund
+              withdrawals until you reach it - if the accessible pots can&apos;t
+              cover a year&apos;s withdrawal, the plan counts as having run out,
+              even if locked pots still hold money. The shaded bands show the
+              range of outcomes across all scenarios: the darker band covers the
+              middle half, and the lighter band covers 80% of them.
             </Trans>
           </Paragraph>
           <Paragraph>
@@ -510,8 +527,8 @@ export function MonteCarlo() {
                 Damodaran data) drawn in random order for each pot&apos;s
                 allocation mix. Real crash years are included, but multi-year
                 momentum is lost by shuffling, fees and taxes are ignored, and
-                US history has been unusually good&mdash;results may be
-                optimistic for globally diversified portfolios.
+                US history has been unusually good results may be optimistic for
+                globally diversified portfolios.
               </Trans>
             ) : (
               <Trans>
