@@ -284,6 +284,9 @@ export function MonteCarloConfiguration({
             // Without this, typing in the pot fields moves the list
             // highlight to whichever pot name matches the keystroke
             disallowTypeAhead
+            // Let Tab move between the fields inside pot rows instead of
+            // jumping out of the list (default ARIA grid behavior)
+            keyboardNavigationBehavior="tab"
             items={config.pots}
             dependencies={[config, onConfigChange]}
             dragAndDropHooks={dragAndDropHooks}

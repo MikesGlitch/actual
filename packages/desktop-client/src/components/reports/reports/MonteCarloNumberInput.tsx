@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Input } from '@actual-app/components/input';
 import { css } from '@emotion/css';
@@ -45,6 +45,7 @@ export function MonteCarloNumberInput({
   placeholder,
   disabled = false,
 }: MonteCarloNumberInputProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState(() => toDisplayText(value, scale));
   const [isFocused, setIsFocused] = useState(false);
 
@@ -87,6 +88,7 @@ export function MonteCarloNumberInput({
 
   return (
     <Input
+      ref={inputRef}
       type="number"
       className={NUMBER_INPUT_CLASS}
       min={min}
@@ -96,7 +98,12 @@ export function MonteCarloNumberInput({
       placeholder={placeholder}
       disabled={disabled}
       onChangeValue={setText}
-      onFocus={() => setIsFocused(true)}
+      onFocus={() => {
+        setIsFocused(true);
+        // Highlight the whole value so typing replaces it, matching the
+        // currency inputs
+        setTimeout(() => inputRef.current?.select(), 0);
+      }}
       onBlur={event => {
         setIsFocused(false);
         commit(event.currentTarget.value);
