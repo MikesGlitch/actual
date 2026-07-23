@@ -44,7 +44,7 @@ The configuration area at the top of the report is organized into three tabs.
 
 - **Your current age** and **Pot must last until age** - these two numbers define the period being tested. If you're 40 and want the money to last until you're 95, the report simulates 55 years.
 - **Return model** - how the simulation invents each year's investment returns:
-  - **Random (normal distribution)**: each year's return is drawn randomly around the expected return and volatility you set on each pot. Think of it as a weighted coin flip, year after year.
+  - **Random (normal distribution)**: each year's return is drawn randomly around the expected return and volatility you set on each pot. Think of it as a weighted coin flip, year after year. Every pot lives through the same simulated market year - a good year is good for all your pots, scaled by each pot's volatility - so two pots holding the same investments earn the same return.
   - **Historical returns, shuffled**: instead of invented numbers, each simulated year is a real year from US market history (1928 onwards), picked in random order. Real crashes like 1931 and 2008 are in the deck.
   - **Historical sequences (replay)**: each replay is actual history, played in order from a different starting year - "what if you retired in 1929?", "what if you retired in 1972?", and so on. This is the strictest test of bad timing, because real crashes and recoveries happen in their true order.
 - **Inflation (mean %)** - the average yearly rise in prices. When set, your planned spending grows with it so your spending power keeps up. Leave it blank to take exactly the same amount every year.
@@ -93,7 +93,7 @@ All the rules share two ideas:
 - Your **spending phases** set the planned amounts. From the second year onward, the rule adjusts what's actually taken - independently in every replay, reacting to how that replay is going. A cut or raise carries across phase boundaries: if the rule cut your spending by 10% during a rough patch, the next phase's amount starts 10% lower too.
 - Rules usually improve your **success rate** by cutting spending in bad times, but that safety isn't free - you get it by living on less. Keep an eye on the **Median total withdrawn** stat to see what a rule costs you in income.
 
-If you set a **Minimum withdrawal**, your yearly spending never drops below that amount, no matter what the rule says.
+If you set a **Minimum withdrawal**, your yearly spending never drops below that amount, no matter what the rule says. Like your spending phases, it's an amount in today's money - it rises with inflation so its spending power holds steady.
 
 ### Guardrails (Guyton-Klinger)
 
@@ -147,14 +147,14 @@ This bar chart only counts the replays that failed, showing at which age they ra
 
 ![The simulation runs table](/img/reports/monte-carlo-runs.png)
 
-Switch the results view from **Chart** to **Runs** to see every replay listed from worst outcome to best. Click any run to walk through it year by year: the balance at the start of each year, the withdrawal taken, the investment growth in that year (as money and as a percentage), and the balance at the end. With multiple pots you also get a column per pot, so you can watch - for example - a bridge pot draining while a locked pension keeps growing.
+Switch the results view from **Chart** to **Runs** to see every replay listed from worst outcome to best. Rather than paging through thousands of runs, use the **Jump to** links to go straight to the worst, median or best run - or the 25th/75th percentile for a typically-bad or typically-good outcome - with the run highlighted so you can click into it. Click any run to walk through it year by year: the balance at the start of each year, the withdrawal taken, the investment growth in that year (as money and as a percentage), and the balance at the end. With multiple pots you also get a column per pot, so you can watch - for example - a bridge pot draining while a locked pension keeps growing.
 
 If a run failed while money was still locked in an inaccessible pot, the table says so explicitly, so you can tell the difference between "the market ate my savings" and "the money existed but I couldn't reach it yet."
 
 ## Things to Keep in Mind
 
 - **This is a model, not a prophecy.** A 90% success rate does not mean success is guaranteed - 1 in 10 of the simulated futures still failed.
-- **The random model is simplified.** It draws each year independently, which ignores the way real crashes cluster together and the occasional extreme year. The historical models partly address this.
+- **The random model is simplified.** It draws each year independently, which ignores the way real crashes cluster together and the occasional extreme year. It also moves all pots in step - there's no independent luck per pot, so a bond-heavy pot dips a little in the same year a stock-heavy pot crashes. The historical models partly address the first point.
 - **The historical data is US market data** (S&P 500 shares, US government bonds and bills, from 1928 onwards). US markets had an unusually good century, so results may be optimistic if your money is invested elsewhere.
 - **Fees and taxes are not modeled.** Your real returns will be lower than gross market returns, so consider entering expected returns net of fees.
 - **Garbage in, garbage out.** The results are only as good as your estimates for returns, volatility, spending and inflation. Try a few variations - small changes to the withdrawal often move the success rate a lot.

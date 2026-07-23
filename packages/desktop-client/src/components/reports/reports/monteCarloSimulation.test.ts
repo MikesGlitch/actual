@@ -265,32 +265,56 @@ describe('runMonteCarloSimulation', () => {
   });
 
   it('treats two identical half-size pots the same as one pot', () => {
-    const singlePot = runMonteCarloSimulation(
-      makeParams({}, { startingBalance: 50_000_000, returnStdDev: 0 }),
-    );
-
-    for (const strategy of ['proportional', 'sequential'] as const) {
-      const twoPots = runMonteCarloSimulation(
-        makeParams({
-          withdrawalStrategy: strategy,
-          pots: [
-            makePot({
-              id: 'a',
-              startingBalance: 25_000_000,
-              returnStdDev: 0,
-            }),
-            makePot({
-              id: 'b',
-              startingBalance: 25_000_000,
-              returnStdDev: 0,
-            }),
-          ],
-        }),
+    // Holds even with volatility, since all pots share each year's market
+    // shock
+    for (const returnStdDev of [0, 0.15]) {
+      const singlePot = runMonteCarloSimulation(
+        makeParams({}, { startingBalance: 50_000_000, returnStdDev }),
       );
 
-      expect(twoPots.successRate).toBe(singlePot.successRate);
-      expect(twoPots.medianEndingBalance).toBe(singlePot.medianEndingBalance);
-      expect(twoPots.percentileBands).toEqual(singlePot.percentileBands);
+      for (const strategy of ['proportional', 'sequential'] as const) {
+        const twoPots = runMonteCarloSimulation(
+          makeParams({
+            withdrawalStrategy: strategy,
+            pots: [
+              makePot({
+                id: 'a',
+                startingBalance: 25_000_000,
+                returnStdDev,
+              }),
+              makePot({
+                id: 'b',
+                startingBalance: 25_000_000,
+                returnStdDev,
+              }),
+            ],
+          }),
+        );
+
+        expect(twoPots.successRate).toBe(singlePot.successRate);
+        expect(twoPots.medianEndingBalance).toBe(singlePot.medianEndingBalance);
+        expect(twoPots.percentileBands).toEqual(singlePot.percentileBands);
+      }
+    }
+  });
+
+  it('gives identically-invested pots identical yearly returns', () => {
+    const result = runMonteCarloSimulation(
+      makeParams({
+        captureRunDetail: 7,
+        pots: [
+          makePot({ id: 'isa', startingBalance: 25_000_000 }),
+          makePot({ id: 'pension', startingBalance: 25_000_000 }),
+        ],
+      }),
+    );
+
+    const rows = result.runDetail!;
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      if (row.potReturns[0] != null && row.potReturns[1] != null) {
+        expect(row.potReturns[0]).toBe(row.potReturns[1]);
+      }
     }
   });
 
@@ -510,6 +534,40 @@ describe('runMonteCarloSimulation', () => {
     expect(cutsFloored.medianTotalWithdrawn).toBe(
       withoutRule.medianTotalWithdrawn,
     );
+  });
+
+  it("keeps the minimum withdrawal floor in today's money under inflation", () => {
+    // Guardrails cut hard while prices rise; the floor must rise with
+    // inflation too, so in today's money withdrawals never dip below it
+    const result = runMonteCarloSimulation(
+      makeParams(
+        {
+          annualWithdrawal: 10_000,
+          horizonYears: 8,
+          inflationMean: 0.05,
+          inflationStdDev: 0,
+          deflateToTodaysMoney: true,
+          captureRunDetail: 0,
+          minimumWithdrawal: 8_000,
+          withdrawalRule: {
+            ...WITHDRAWAL_RULE_DEFAULTS,
+            type: 'guardrails',
+            preservationTriggerPct: 0.1,
+            preservationCutPct: 0.5,
+          },
+        },
+        { startingBalance: 100_000, expectedReturnMean: 0, returnStdDev: 0 },
+      ),
+    );
+
+    const rows = result.runDetail!;
+    expect(rows).toHaveLength(8);
+    expect(rows[0].withdrawal).toBe(10_000);
+    // Year 2's 50% cut lands well below the floor, so the floor binds
+    expect(rows[1].withdrawal).toBe(8_000);
+    for (const row of rows.slice(1)) {
+      expect(row.withdrawal).toBeGreaterThanOrEqual(8_000);
+    }
   });
 
   it('fails when accessible pots run dry before a locked pot unlocks', () => {

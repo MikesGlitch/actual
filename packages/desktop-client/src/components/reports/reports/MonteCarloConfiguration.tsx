@@ -285,7 +285,9 @@ export function MonteCarloConfiguration({
                         <br />
                         <br />
                         Random: drawn from a normal distribution around each
-                        pot&apos;s expected return and volatility.
+                        pot&apos;s expected return and volatility. All pots
+                        experience the same market conditions each year, scaled
+                        by their own volatility.
                         <br />
                         <br />
                         Historical, shuffled: drawn from actual US market years

@@ -418,6 +418,11 @@ export function runMonteCarloSimulation(
     }
     return blended;
   });
+  // Whether any pot's return comes from a normal draw (the whole normal
+  // model, plus custom pots in historical modes)
+  const hasNormalDrawPot = potHistoricalReturns.some(
+    blended => blended === null,
+  );
 
   const inflationMean = params.inflationMean;
   const inflationStdDev =
@@ -565,13 +570,15 @@ export function runMonteCarloSimulation(
         }
         // The minimum floor belongs to the withdrawal rule system (the UI
         // only offers it alongside a rule); with no rule active the planned
-        // spending is taken as-is
+        // spending is taken as-is. Like the phase amounts it's in today's
+        // money, so it rises with this replay's inflation path
+        const minimumThisYear = minimumWithdrawal * cumInflation;
         if (
           rule.type !== 'none' &&
           minimumWithdrawal > 0 &&
-          withdrawal < minimumWithdrawal
+          withdrawal < minimumThisYear
         ) {
-          withdrawal = minimumWithdrawal;
+          withdrawal = minimumThisYear;
         }
 
         // Only pots that have reached their access age can fund this year's
@@ -643,16 +650,18 @@ export function runMonteCarloSimulation(
             potBalances[lastAccessibleIndex] -= remaining;
           }
 
-          // Pick this year's historical year once so all pots experience
-          // the same market year (preserves cross-asset correlation)
+          // Every pot experiences the same market year: historical models
+          // pick one history year for all pots, and normally-drawn pots
+          // share one market shock scaled by their own volatility. Pots
+          // holding the same investments therefore earn the same return.
           let historyIndex = -1;
           if (returnModel === 'historical-bootstrap') {
             historyIndex = Math.floor(random() * historyCount);
           } else if (returnModel === 'historical-sequence') {
             historyIndex = (sim + year - 1) % historyCount;
           }
+          const marketShock = hasNormalDrawPot ? nextNormal() : 0;
 
-          // Each pot gets its own return for the year
           total = 0;
           for (let p = 0; p < potCount; p++) {
             if (potBalances[p] > 0) {
@@ -660,7 +669,7 @@ export function runMonteCarloSimulation(
               const yearReturn =
                 blended && historyIndex >= 0
                   ? blended[historyIndex]
-                  : potMeans[p] + potStdDevs[p] * nextNormal();
+                  : potMeans[p] + potStdDevs[p] * marketShock;
               if (capturedPotReturns) {
                 capturedPotReturns[p] = yearReturn;
               }

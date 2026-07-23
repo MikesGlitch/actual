@@ -43,8 +43,21 @@ export function MonteCarloRunsTable({
 
   const [sortOrder, setSortOrder] = useState<SortOrder>('worst-first');
   const [page, setPage] = useState(0);
+  const [highlightedRank, setHighlightedRank] = useState<number | null>(null);
 
   const simulationCount = endingBalances.length;
+
+  // Jump straight to a given percentile of the ranked outcomes (0 = worst,
+  // 1 = best), landing on its page and highlighting the exact run
+  function jumpToPercentile(percentile: number) {
+    const worstFirstRank = Math.round(percentile * (simulationCount - 1));
+    const rank =
+      sortOrder === 'worst-first'
+        ? worstFirstRank
+        : simulationCount - 1 - worstFirstRank;
+    setPage(Math.floor(rank / PAGE_SIZE));
+    setHighlightedRank(rank);
+  }
 
   // Rank every run: by ending balance, using the depletion year to order
   // the failed runs (which all end at zero) among themselves
@@ -88,11 +101,35 @@ export function MonteCarloRunsTable({
             total: simulationCount,
           })}
         </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+          <Text style={{ color: theme.pageTextSubdued, marginRight: 4 }}>
+            <Trans>Jump to:</Trans>
+          </Text>
+          {(
+            [
+              [t('Worst'), 0],
+              [t('25th percentile'), 0.25],
+              [t('Median'), 0.5],
+              [t('75th percentile'), 0.75],
+              [t('Best'), 1],
+            ] as const
+          ).map(([label, percentile]) => (
+            <Button
+              key={label}
+              variant="bare"
+              onPress={() => jumpToPercentile(percentile)}
+              style={{ color: theme.pageTextLink, padding: '2px 6px' }}
+            >
+              {label}
+            </Button>
+          ))}
+        </View>
         <Select
           value={sortOrder}
           onChange={value => {
             setSortOrder(value as SortOrder);
             setPage(0);
+            setHighlightedRank(null);
           }}
           options={[
             ['worst-first', t('Worst outcomes first')],
@@ -128,6 +165,7 @@ export function MonteCarloRunsTable({
       {pageIndices.map((simIndex, rowNumber) => {
         const depletionYear = depletionYearBySim[simIndex];
         const hasSurvived = depletionYear === -1;
+        const isHighlighted = highlightedRank === pageStart + rowNumber;
         return (
           <Button
             key={simIndex}
@@ -137,6 +175,9 @@ export function MonteCarloRunsTable({
               padding: '8px 0',
               borderBottom: `1px solid ${theme.tableBorder}`,
               borderRadius: 0,
+              ...(isHighlighted && {
+                backgroundColor: theme.tableRowBackgroundHighlight,
+              }),
             }}
           >
             <View
@@ -206,13 +247,19 @@ export function MonteCarloRunsTable({
       >
         <Button
           isDisabled={currentPage === 0}
-          onPress={() => setPage(currentPage - 1)}
+          onPress={() => {
+            setPage(currentPage - 1);
+            setHighlightedRank(null);
+          }}
         >
           <Trans>Previous</Trans>
         </Button>
         <Button
           isDisabled={currentPage >= pageCount - 1}
-          onPress={() => setPage(currentPage + 1)}
+          onPress={() => {
+            setPage(currentPage + 1);
+            setHighlightedRank(null);
+          }}
         >
           <Trans>Next</Trans>
         </Button>
