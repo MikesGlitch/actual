@@ -42,6 +42,21 @@ import { MonteCarloWithdrawalRuleConfiguration } from '#components/reports/repor
 
 type ConfigurationTab = 'plan' | 'pots' | 'withdrawals';
 
+// Same visual family as the stat-tile headings on the report page
+const PLAN_GROUP_HEADING_STYLE = {
+  fontSize: 12,
+  fontWeight: 600,
+  letterSpacing: 0.5,
+  textTransform: 'uppercase',
+  color: theme.pageText,
+} as const;
+
+const PLAN_GROUP_FIELDS_STYLE = {
+  flexDirection: 'row',
+  gap: 20,
+  alignItems: 'flex-end',
+} as const;
+
 type MonteCarloConfigurationProps = {
   config: MonteCarloConfig;
   onConfigChange: (changes: Partial<MonteCarloConfig>) => void;
@@ -149,216 +164,241 @@ export function MonteCarloConfiguration({
           style={{
             flexDirection: 'row',
             flexWrap: 'wrap',
-            // Keep the inputs on a shared baseline even if a label wraps
-            alignItems: 'flex-end',
-            gap: 20,
+            alignItems: 'flex-start',
+            rowGap: 20,
+            columnGap: 40,
           }}
         >
-          <View style={FIELD_STYLE}>
-            <View style={FIELD_LABEL_ROW_STYLE}>
-              <Text style={FIELD_LABEL_STYLE}>
-                <Trans>Your current age</Trans>
-              </Text>
+          <View style={{ gap: 10 }}>
+            <Text style={PLAN_GROUP_HEADING_STYLE}>
+              <Trans>Your plan</Trans>
+            </Text>
+            <View style={PLAN_GROUP_FIELDS_STYLE}>
+              <View style={FIELD_STYLE}>
+                <View style={FIELD_LABEL_ROW_STYLE}>
+                  <Text style={FIELD_LABEL_STYLE}>
+                    <Trans>Your current age</Trans>
+                  </Text>
+                </View>
+                <MonteCarloNumberInput
+                  value={config.currentAge}
+                  roundToInteger
+                  min={16}
+                  max={119}
+                  step={1}
+                  onCommit={newValue =>
+                    onConfigChange({
+                      currentAge: newValue ?? MONTE_CARLO_DEFAULTS.currentAge,
+                    })
+                  }
+                />
+              </View>
+
+              <View style={FIELD_STYLE}>
+                <View style={FIELD_LABEL_ROW_STYLE}>
+                  <Text style={FIELD_LABEL_STYLE}>
+                    <Trans>Pot must last until age</Trans>
+                  </Text>
+                </View>
+                <MonteCarloNumberInput
+                  value={config.targetAge}
+                  roundToInteger
+                  min={config.currentAge + 1}
+                  max={120}
+                  step={1}
+                  onCommit={newValue =>
+                    onConfigChange({
+                      targetAge: newValue ?? MONTE_CARLO_DEFAULTS.targetAge,
+                    })
+                  }
+                />
+              </View>
             </View>
-            <MonteCarloNumberInput
-              value={config.currentAge}
-              roundToInteger
-              min={16}
-              max={119}
-              step={1}
-              onCommit={newValue =>
-                onConfigChange({
-                  currentAge: newValue ?? MONTE_CARLO_DEFAULTS.currentAge,
-                })
-              }
-            />
           </View>
 
-          <View style={FIELD_STYLE}>
-            <View style={FIELD_LABEL_ROW_STYLE}>
-              <Text style={FIELD_LABEL_STYLE}>
-                <Trans>Pot must last until age</Trans>
-              </Text>
+          <View style={{ gap: 10 }}>
+            <Text style={PLAN_GROUP_HEADING_STYLE}>
+              <Trans>Inflation</Trans>
+            </Text>
+            <View style={PLAN_GROUP_FIELDS_STYLE}>
+              <View style={FIELD_STYLE}>
+                <View style={FIELD_LABEL_ROW_STYLE}>
+                  <Text style={FIELD_LABEL_STYLE}>
+                    <Trans>Mean (%)</Trans>
+                  </Text>
+                  <Tooltip
+                    content={
+                      <View style={{ maxWidth: 300 }}>
+                        <Text>
+                          <Trans>
+                            The average yearly rise in prices. When set, your
+                            planned spending grows with it so your spending
+                            power is maintained.
+                            <br />
+                            <br />
+                            Leave blank to keep withdrawals flat.
+                          </Trans>
+                        </Text>
+                      </View>
+                    }
+                    placement="bottom start"
+                    style={{ ...styles.tooltip }}
+                  >
+                    <SvgQuestion height={12} width={12} cursor="pointer" />
+                  </Tooltip>
+                </View>
+                <MonteCarloNumberInput
+                  value={config.inflationMean}
+                  scale={100}
+                  allowEmpty
+                  min={0}
+                  max={100}
+                  placeholder={t('None')}
+                  onCommit={newValue =>
+                    onConfigChange({ inflationMean: newValue })
+                  }
+                />
+              </View>
+
+              <View style={FIELD_STYLE}>
+                <View style={FIELD_LABEL_ROW_STYLE}>
+                  <Text style={FIELD_LABEL_STYLE}>
+                    <Trans>Std dev (%)</Trans>
+                  </Text>
+                  <Tooltip
+                    content={
+                      <View style={{ maxWidth: 300 }}>
+                        <Text>
+                          <Trans>
+                            Real-world inflation bounces around from year to
+                            year rather than staying fixed. When set, each
+                            simulated year draws its own inflation rate around
+                            the mean.
+                            <br />
+                            <br />
+                            Around 2% matches how much US inflation has varied
+                            in recent decades. Set to 0 to use the fixed mean
+                            rate every year.
+                          </Trans>
+                        </Text>
+                      </View>
+                    }
+                    placement="bottom start"
+                    style={{ ...styles.tooltip }}
+                  >
+                    <SvgQuestion height={12} width={12} cursor="pointer" />
+                  </Tooltip>
+                </View>
+                <MonteCarloNumberInput
+                  value={config.inflationStdDev}
+                  scale={100}
+                  min={0}
+                  max={50}
+                  disabled={config.inflationMean == null}
+                  onCommit={newValue =>
+                    onConfigChange({ inflationStdDev: newValue ?? 0 })
+                  }
+                />
+              </View>
             </View>
-            <MonteCarloNumberInput
-              value={config.targetAge}
-              roundToInteger
-              min={config.currentAge + 1}
-              max={120}
-              step={1}
-              onCommit={newValue =>
-                onConfigChange({
-                  targetAge: newValue ?? MONTE_CARLO_DEFAULTS.targetAge,
-                })
-              }
-            />
           </View>
 
-          <View style={FIELD_STYLE}>
-            <View style={FIELD_LABEL_ROW_STYLE}>
-              <Text style={FIELD_LABEL_STYLE}>
-                <Trans>Inflation (mean %)</Trans>
-              </Text>
-              <Tooltip
-                content={
-                  <View style={{ maxWidth: 300 }}>
-                    <Text>
-                      <Trans>
-                        The average yearly rise in prices. When set, your
-                        planned spending grows with it so your spending power is
-                        maintained.
-                        <br />
-                        <br />
-                        Leave blank to keep withdrawals flat.
-                      </Trans>
-                    </Text>
-                  </View>
-                }
-                placement="bottom start"
-                style={{ ...styles.tooltip }}
-              >
-                <SvgQuestion height={12} width={12} cursor="pointer" />
-              </Tooltip>
-            </View>
-            <MonteCarloNumberInput
-              value={config.inflationMean}
-              scale={100}
-              allowEmpty
-              min={0}
-              max={100}
-              placeholder={t('None')}
-              onCommit={newValue => onConfigChange({ inflationMean: newValue })}
-            />
-          </View>
+          <View style={{ gap: 10 }}>
+            <Text style={PLAN_GROUP_HEADING_STYLE}>
+              <Trans>Simulation</Trans>
+            </Text>
+            <View style={PLAN_GROUP_FIELDS_STYLE}>
+              <View style={{ width: 250 }}>
+                <View style={FIELD_LABEL_ROW_STYLE}>
+                  <Text style={FIELD_LABEL_STYLE}>
+                    <Trans>Return model</Trans>
+                  </Text>
+                  <Tooltip
+                    content={
+                      <View style={{ maxWidth: 300 }}>
+                        <Text>
+                          <Trans>
+                            How each simulated year&apos;s investment return is
+                            generated.
+                            <br />
+                            <br />
+                            Random: drawn from a normal distribution around each
+                            pot&apos;s expected return and volatility. All pots
+                            experience the same market conditions each year,
+                            scaled by their own volatility.
+                            <br />
+                            <br />
+                            Historical, shuffled: drawn from actual US market
+                            years (1928 onwards) in random order.
+                            <br />
+                            <br />
+                            Historical sequences: replays real market history,
+                            one scenario per starting year. Pots with a Custom
+                            allocation always use their own return and
+                            volatility.
+                          </Trans>
+                        </Text>
+                      </View>
+                    }
+                    placement="bottom start"
+                    style={{ ...styles.tooltip }}
+                  >
+                    <SvgQuestion height={12} width={12} cursor="pointer" />
+                  </Tooltip>
+                </View>
+                <Select
+                  value={config.returnModel}
+                  onChange={value =>
+                    onConfigChange({
+                      returnModel: value as MonteCarloReturnModel,
+                    })
+                  }
+                  options={[
+                    ['normal', t('Random (normal distribution)')],
+                    ['historical-bootstrap', t('Historical returns, shuffled')],
+                    ['historical-sequence', t('Historical sequences (replay)')],
+                  ]}
+                />
+              </View>
 
-          <View style={FIELD_STYLE}>
-            <View style={FIELD_LABEL_ROW_STYLE}>
-              <Text style={FIELD_LABEL_STYLE}>
-                <Trans>Inflation (std dev %)</Trans>
-              </Text>
-              <Tooltip
-                content={
-                  <View style={{ maxWidth: 300 }}>
-                    <Text>
-                      <Trans>
-                        Real-world inflation bounces around from year to year
-                        rather than staying fixed. When set, each simulated year
-                        draws its own inflation rate around the mean.
-                        <br />
-                        <br />
-                        Around 2% matches how much US inflation has varied in
-                        recent decades. Set to 0 to use the fixed mean rate
-                        every year.
-                      </Trans>
-                    </Text>
-                  </View>
-                }
-                placement="bottom start"
-                style={{ ...styles.tooltip }}
-              >
-                <SvgQuestion height={12} width={12} cursor="pointer" />
-              </Tooltip>
+              <View style={FIELD_STYLE}>
+                <View style={FIELD_LABEL_ROW_STYLE}>
+                  <Text style={FIELD_LABEL_STYLE}>
+                    <Trans>Simulations</Trans>
+                  </Text>
+                  <Tooltip
+                    content={
+                      <View style={{ maxWidth: 300 }}>
+                        <Text>
+                          <Trans>
+                            How many random scenarios to run. More simulations
+                            give a steadier result but take slightly longer.
+                          </Trans>
+                        </Text>
+                      </View>
+                    }
+                    placement="bottom start"
+                    style={{ ...styles.tooltip }}
+                  >
+                    <SvgQuestion height={12} width={12} cursor="pointer" />
+                  </Tooltip>
+                </View>
+                <MonteCarloNumberInput
+                  value={config.simulationCount}
+                  roundToInteger
+                  min={MIN_SIMULATION_COUNT}
+                  max={MAX_SIMULATION_COUNT}
+                  step={500}
+                  // Sequence replay runs one scenario per historical start year
+                  disabled={config.returnModel === 'historical-sequence'}
+                  onCommit={newValue =>
+                    onConfigChange({
+                      simulationCount: newValue ?? MIN_SIMULATION_COUNT,
+                    })
+                  }
+                />
+              </View>
             </View>
-            <MonteCarloNumberInput
-              value={config.inflationStdDev}
-              scale={100}
-              min={0}
-              max={50}
-              disabled={config.inflationMean == null}
-              onCommit={newValue =>
-                onConfigChange({ inflationStdDev: newValue ?? 0 })
-              }
-            />
-          </View>
-
-          <View style={{ width: 250 }}>
-            <View style={FIELD_LABEL_ROW_STYLE}>
-              <Text style={FIELD_LABEL_STYLE}>
-                <Trans>Return model</Trans>
-              </Text>
-              <Tooltip
-                content={
-                  <View style={{ maxWidth: 300 }}>
-                    <Text>
-                      <Trans>
-                        How each simulated year&apos;s investment return is
-                        generated.
-                        <br />
-                        <br />
-                        Random: drawn from a normal distribution around each
-                        pot&apos;s expected return and volatility. All pots
-                        experience the same market conditions each year, scaled
-                        by their own volatility.
-                        <br />
-                        <br />
-                        Historical, shuffled: drawn from actual US market years
-                        (1928 onwards) in random order.
-                        <br />
-                        <br />
-                        Historical sequences: replays real market history, one
-                        scenario per starting year. Pots with a Custom
-                        allocation always use their own return and volatility.
-                      </Trans>
-                    </Text>
-                  </View>
-                }
-                placement="bottom start"
-                style={{ ...styles.tooltip }}
-              >
-                <SvgQuestion height={12} width={12} cursor="pointer" />
-              </Tooltip>
-            </View>
-            <Select
-              value={config.returnModel}
-              onChange={value =>
-                onConfigChange({
-                  returnModel: value as MonteCarloReturnModel,
-                })
-              }
-              options={[
-                ['normal', t('Random (normal distribution)')],
-                ['historical-bootstrap', t('Historical returns, shuffled')],
-                ['historical-sequence', t('Historical sequences (replay)')],
-              ]}
-            />
-          </View>
-
-          <View style={FIELD_STYLE}>
-            <View style={FIELD_LABEL_ROW_STYLE}>
-              <Text style={FIELD_LABEL_STYLE}>
-                <Trans>Simulations</Trans>
-              </Text>
-              <Tooltip
-                content={
-                  <View style={{ maxWidth: 300 }}>
-                    <Text>
-                      <Trans>
-                        How many random scenarios to run. More simulations give
-                        a steadier result but take slightly longer.
-                      </Trans>
-                    </Text>
-                  </View>
-                }
-                placement="bottom start"
-                style={{ ...styles.tooltip }}
-              >
-                <SvgQuestion height={12} width={12} cursor="pointer" />
-              </Tooltip>
-            </View>
-            <MonteCarloNumberInput
-              value={config.simulationCount}
-              roundToInteger
-              min={MIN_SIMULATION_COUNT}
-              max={MAX_SIMULATION_COUNT}
-              step={500}
-              // Sequence replay runs one scenario per historical start year
-              disabled={config.returnModel === 'historical-sequence'}
-              onCommit={newValue =>
-                onConfigChange({
-                  simulationCount: newValue ?? MIN_SIMULATION_COUNT,
-                })
-              }
-            />
           </View>
         </View>
       )}
