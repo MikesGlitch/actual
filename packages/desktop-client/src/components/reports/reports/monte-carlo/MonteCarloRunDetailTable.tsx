@@ -10,7 +10,7 @@ import { PrivacyFilter } from '#components/PrivacyFilter';
 import type {
   MonteCarloPot,
   MonteCarloRunDetailRow,
-} from '#components/reports/reports/monteCarloSimulation';
+} from '#components/reports/reports/monte-carlo/monteCarloSimulation';
 import { useFormat } from '#hooks/useFormat';
 
 const HEADER_CELL_STYLE = {

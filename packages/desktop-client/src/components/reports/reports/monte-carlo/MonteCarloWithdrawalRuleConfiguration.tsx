@@ -9,13 +9,13 @@ import { Tooltip } from '@actual-app/components/tooltip';
 import { View } from '@actual-app/components/view';
 import type { MonteCarloWithdrawalRuleType } from '@actual-app/core/types/models';
 
-import { MonteCarloNumberInput } from '#components/reports/reports/MonteCarloNumberInput';
+import { MonteCarloNumberInput } from '#components/reports/reports/monte-carlo/MonteCarloNumberInput';
 import {
   FIELD_LABEL_ROW_STYLE,
   FIELD_LABEL_STYLE,
   FIELD_STYLE,
-} from '#components/reports/reports/MonteCarloPotConfiguration';
-import type { MonteCarloWithdrawalRuleConfig } from '#components/reports/reports/monteCarloSimulation';
+} from '#components/reports/reports/monte-carlo/MonteCarloPotConfiguration';
+import type { MonteCarloWithdrawalRuleConfig } from '#components/reports/reports/monte-carlo/monteCarloSimulation';
 import { FinancialInput } from '#components/util/FinancialInput';
 
 type MonteCarloWithdrawalRuleConfigurationProps = {

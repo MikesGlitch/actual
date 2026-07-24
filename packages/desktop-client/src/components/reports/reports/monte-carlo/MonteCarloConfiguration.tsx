@@ -19,25 +19,26 @@ import type {
 import { css } from '@emotion/css';
 import { v4 as uuidv4 } from 'uuid';
 
-import { MonteCarloNumberInput } from '#components/reports/reports/MonteCarloNumberInput';
+import { MonteCarloNumberInput } from '#components/reports/reports/monte-carlo/MonteCarloNumberInput';
 import {
   FIELD_LABEL_ROW_STYLE,
   FIELD_LABEL_STYLE,
   FIELD_STYLE,
   MonteCarloPotConfiguration,
-} from '#components/reports/reports/MonteCarloPotConfiguration';
+} from '#components/reports/reports/monte-carlo/MonteCarloPotConfiguration';
+import { MonteCarloPotsTableHeader } from '#components/reports/reports/monte-carlo/MonteCarloPotsTableHeader';
 import {
   createMonteCarloPot,
   MAX_SIMULATION_COUNT,
   MIN_SIMULATION_COUNT,
   MONTE_CARLO_DEFAULTS,
-} from '#components/reports/reports/monteCarloSimulation';
+} from '#components/reports/reports/monte-carlo/monteCarloSimulation';
 import type {
   MonteCarloConfig,
   MonteCarloPot,
-} from '#components/reports/reports/monteCarloSimulation';
-import { MonteCarloSpendingPhases } from '#components/reports/reports/MonteCarloSpendingPhases';
-import { MonteCarloWithdrawalRuleConfiguration } from '#components/reports/reports/MonteCarloWithdrawalRuleConfiguration';
+} from '#components/reports/reports/monte-carlo/monteCarloSimulation';
+import { MonteCarloSpendingPhases } from '#components/reports/reports/monte-carlo/MonteCarloSpendingPhases';
+import { MonteCarloWithdrawalRuleConfiguration } from '#components/reports/reports/monte-carlo/MonteCarloWithdrawalRuleConfiguration';
 
 type ConfigurationTab = 'plan' | 'pots' | 'withdrawals';
 
@@ -366,35 +367,38 @@ export function MonteCarloConfiguration({
           tab alongside these. */}
       {activeTab === 'pots' && (
         <View>
-          <GridList
-            aria-label={t('Investment pots')}
-            // Without this, typing in the pot fields moves the list
-            // highlight to whichever pot name matches the keystroke
-            disallowTypeAhead
-            // Let Tab move between the fields inside pot rows instead of
-            // jumping out of the list (default ARIA grid behavior)
-            keyboardNavigationBehavior="tab"
-            items={config.pots}
-            dependencies={[config, onConfigChange]}
-            dragAndDropHooks={dragAndDropHooks}
-          >
-            {pot => (
-              <MonteCarloPotConfiguration
-                key={pot.id}
-                pot={pot}
-                potNumber={config.pots.indexOf(pot) + 1}
-                canRemove={config.pots.length > 1}
-                usesHistoricalReturns={config.returnModel !== 'normal'}
-                onPotChange={changes => onPotChange(pot.id, changes)}
-                onRemove={() =>
-                  onConfigChange({
-                    pots: config.pots.filter(other => other.id !== pot.id),
-                  })
-                }
-              />
-            )}
-          </GridList>
-          <View style={{ flexDirection: 'row' }}>
+          <View style={{ ...styles.tableContainer, flex: 'unset' }}>
+            <MonteCarloPotsTableHeader />
+            <GridList
+              aria-label={t('Investment pots')}
+              // Without this, typing in the pot fields moves the list
+              // highlight to whichever pot name matches the keystroke
+              disallowTypeAhead
+              // Let Tab move between the fields inside pot rows instead of
+              // jumping out of the list (default ARIA grid behavior)
+              keyboardNavigationBehavior="tab"
+              items={config.pots}
+              dependencies={[config, onConfigChange]}
+              dragAndDropHooks={dragAndDropHooks}
+            >
+              {pot => (
+                <MonteCarloPotConfiguration
+                  key={pot.id}
+                  pot={pot}
+                  potNumber={config.pots.indexOf(pot) + 1}
+                  canRemove={config.pots.length > 1}
+                  usesHistoricalReturns={config.returnModel !== 'normal'}
+                  onPotChange={changes => onPotChange(pot.id, changes)}
+                  onRemove={() =>
+                    onConfigChange({
+                      pots: config.pots.filter(other => other.id !== pot.id),
+                    })
+                  }
+                />
+              )}
+            </GridList>
+          </View>
+          <View style={{ flexDirection: 'row', marginTop: 10 }}>
             <Button
               onPress={() =>
                 onConfigChange({

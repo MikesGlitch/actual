@@ -18,7 +18,7 @@ import type {
 } from '#components/reports/graphs/MonteCarloGraphTooltip';
 import { MonteCarloGraphTooltip } from '#components/reports/graphs/MonteCarloGraphTooltip';
 import { computePadding } from '#components/reports/graphs/util/computePadding';
-import type { MonteCarloPercentileBand } from '#components/reports/reports/monteCarloSimulation';
+import type { MonteCarloPercentileBand } from '#components/reports/reports/monte-carlo/monteCarloSimulation';
 import { useFormat } from '#hooks/useFormat';
 import { usePrivacyMode } from '#hooks/usePrivacyMode';
 

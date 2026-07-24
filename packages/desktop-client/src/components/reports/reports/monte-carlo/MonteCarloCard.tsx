@@ -17,7 +17,7 @@ import {
   getMonteCarloHorizonYears,
   monteCarloConfigFromMeta,
   runMonteCarloSimulation,
-} from '#components/reports/reports/monteCarloSimulation';
+} from '#components/reports/reports/monte-carlo/monteCarloSimulation';
 
 type MonteCarloCardProps = {
   widgetId: string;

@@ -13,7 +13,7 @@ import { CashFlow } from './reports/CashFlow';
 import { Crossover } from './reports/Crossover';
 import { CustomReport } from './reports/CustomReport';
 import { Formula } from './reports/Formula';
-import { MonteCarlo } from './reports/MonteCarlo';
+import { MonteCarlo } from './reports/monte-carlo/MonteCarlo';
 import { NetWorth } from './reports/NetWorth';
 import { Sankey } from './reports/Sankey';
 import { Spending } from './reports/Spending';

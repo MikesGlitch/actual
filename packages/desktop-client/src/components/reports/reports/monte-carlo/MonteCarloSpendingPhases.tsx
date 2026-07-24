@@ -11,14 +11,14 @@ import { Tooltip } from '@actual-app/components/tooltip';
 import { View } from '@actual-app/components/view';
 import { v4 as uuidv4 } from 'uuid';
 
-import { MonteCarloNumberInput } from '#components/reports/reports/MonteCarloNumberInput';
+import { MonteCarloNumberInput } from '#components/reports/reports/monte-carlo/MonteCarloNumberInput';
 import {
   FIELD_LABEL_ROW_STYLE,
   FIELD_LABEL_STYLE,
   FIELD_STYLE,
-} from '#components/reports/reports/MonteCarloPotConfiguration';
-import { createMonteCarloSpendingPhase } from '#components/reports/reports/monteCarloSimulation';
-import type { MonteCarloSpendingPhase } from '#components/reports/reports/monteCarloSimulation';
+} from '#components/reports/reports/monte-carlo/MonteCarloPotConfiguration';
+import { createMonteCarloSpendingPhase } from '#components/reports/reports/monte-carlo/monteCarloSimulation';
+import type { MonteCarloSpendingPhase } from '#components/reports/reports/monte-carlo/monteCarloSimulation';
 import { FinancialInput } from '#components/util/FinancialInput';
 
 function sortPhases(phases: MonteCarloSpendingPhase[]) {

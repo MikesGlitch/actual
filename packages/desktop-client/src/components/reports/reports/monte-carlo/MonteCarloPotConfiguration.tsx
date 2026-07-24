@@ -1,0 +1,241 @@
+import type { ComponentPropsWithoutRef } from 'react';
+import { GridListItem } from 'react-aria-components';
+import { useTranslation } from 'react-i18next';
+
+import { Button } from '@actual-app/components/button';
+import { SvgDelete } from '@actual-app/components/icons/v0';
+import { SvgDotsHorizontalDouble } from '@actual-app/components/icons/v1';
+import { Input } from '@actual-app/components/input';
+import { Select } from '@actual-app/components/select';
+import { theme } from '@actual-app/components/theme';
+import type { MonteCarloAllocationPreset } from '@actual-app/core/types/models';
+import { css } from '@emotion/css';
+
+import { MonteCarloNumberInput } from '#components/reports/reports/monte-carlo/MonteCarloNumberInput';
+import { POT_COLUMNS } from '#components/reports/reports/monte-carlo/MonteCarloPotsTableHeader';
+import { ALLOCATION_PRESETS } from '#components/reports/reports/monte-carlo/monteCarloSimulation';
+import type { MonteCarloPot } from '#components/reports/reports/monte-carlo/monteCarloSimulation';
+import { Field, Row } from '#components/table';
+import { FinancialInput } from '#components/util/FinancialInput';
+
+export const FIELD_LABEL_STYLE = { fontWeight: 600 } as const;
+
+export const FIELD_STYLE = { width: 170 } as const;
+
+export const FIELD_LABEL_ROW_STYLE = {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  marginBottom: 6,
+  minHeight: 18,
+} as const;
+
+const POT_ROW_HEIGHT = 43;
+
+type MonteCarloPotConfigurationProps = ComponentPropsWithoutRef<
+  typeof GridListItem<MonteCarloPot>
+> & {
+  pot: MonteCarloPot;
+  potNumber: number;
+  canRemove: boolean;
+  /** True when a historical return model is active */
+  usesHistoricalReturns: boolean;
+  onPotChange: (changes: Partial<MonteCarloPot>) => void;
+  onRemove: () => void;
+};
+
+export function MonteCarloPotConfiguration({
+  pot,
+  potNumber,
+  canRemove,
+  usesHistoricalReturns,
+  onPotChange,
+  onRemove,
+  ...props
+}: MonteCarloPotConfigurationProps) {
+  const { t } = useTranslation();
+
+  // Historical models derive this pot's returns from its allocation mix;
+  // the manual return/volatility only apply to Custom pots there
+  const isManualReturnDisabled =
+    usesHistoricalReturns && pot.allocationPreset !== 'custom';
+
+  return (
+    <GridListItem
+      textValue={pot.name || t('Pot {{number}}', { number: potNumber })}
+      className={css({
+        '&[data-dragging]': {
+          opacity: 0.5,
+        },
+      })}
+      {...props}
+    >
+      <Row
+        collapsed
+        height={POT_ROW_HEIGHT}
+        style={{
+          backgroundColor: theme.tableBackground,
+          ':hover': { backgroundColor: theme.tableRowBackgroundHover },
+        }}
+      >
+        <Field
+          width={POT_COLUMNS.dragHandle}
+          truncate={false}
+          style={{ alignItems: 'center' }}
+        >
+          <Button
+            slot="drag"
+            variant="bare"
+            aria-label={t('Drag to reorder')}
+            style={{
+              padding: 6,
+              cursor: 'grab',
+              color: theme.pageTextSubdued,
+            }}
+          >
+            <SvgDotsHorizontalDouble
+              width={14}
+              height={14}
+              style={{ transform: 'rotate(90deg)' }}
+            />
+          </Button>
+        </Field>
+
+        <Field
+          width="flex"
+          style={{ minWidth: POT_COLUMNS.name }}
+          truncate={false}
+        >
+          <Input
+            // Uncontrolled on purpose: committing on blur keeps typing
+            // snappy since every config change re-runs the simulation
+            defaultValue={pot.name}
+            placeholder={t('Pot {{number}}', { number: potNumber })}
+            onUpdate={newName => {
+              if (newName !== pot.name) {
+                onPotChange({ name: newName });
+              }
+            }}
+          />
+        </Field>
+
+        <Field
+          width="flex"
+          style={{ minWidth: POT_COLUMNS.startingBalance }}
+          truncate={false}
+        >
+          <FinancialInput
+            value={pot.startingBalance}
+            onUpdate={value =>
+              onPotChange({ startingBalance: Math.max(0, value) })
+            }
+          />
+        </Field>
+
+        <Field
+          width="flex"
+          style={{ minWidth: POT_COLUMNS.allocation }}
+          truncate={false}
+        >
+          <Select
+            value={pot.allocationPreset}
+            onChange={value => {
+              const preset = value as MonteCarloAllocationPreset;
+              if (preset === 'custom') {
+                onPotChange({ allocationPreset: preset });
+              } else {
+                onPotChange({
+                  allocationPreset: preset,
+                  expectedReturnMean: ALLOCATION_PRESETS[preset].mean,
+                  returnStdDev: ALLOCATION_PRESETS[preset].stdDev,
+                });
+              }
+            }}
+            options={[
+              ['equity-100', t('100% stocks')],
+              ['equity-80', t('80% stocks / 20% bonds')],
+              ['equity-60', t('60% stocks / 40% bonds')],
+              ['equity-40', t('40% stocks / 60% bonds')],
+              ['cash', t('Cash / money market')],
+              ['custom', t('Custom')],
+            ]}
+          />
+        </Field>
+
+        <Field
+          width="flex"
+          style={{ minWidth: POT_COLUMNS.expectedReturn }}
+          truncate={false}
+        >
+          <MonteCarloNumberInput
+            value={pot.expectedReturnMean}
+            scale={100}
+            min={-100}
+            max={100}
+            disabled={isManualReturnDisabled}
+            onCommit={newValue =>
+              onPotChange({
+                expectedReturnMean: newValue ?? 0,
+                allocationPreset: 'custom',
+              })
+            }
+          />
+        </Field>
+
+        <Field
+          width="flex"
+          style={{ minWidth: POT_COLUMNS.volatility }}
+          truncate={false}
+        >
+          <MonteCarloNumberInput
+            value={pot.returnStdDev}
+            scale={100}
+            min={0}
+            max={100}
+            disabled={isManualReturnDisabled}
+            onCommit={newValue =>
+              onPotChange({
+                returnStdDev: newValue ?? 0,
+                allocationPreset: 'custom',
+              })
+            }
+          />
+        </Field>
+
+        <Field
+          width="flex"
+          style={{ minWidth: POT_COLUMNS.accessAge }}
+          truncate={false}
+        >
+          <MonteCarloNumberInput
+            value={pot.accessAge}
+            allowEmpty
+            roundToInteger
+            min={16}
+            max={120}
+            step={1}
+            placeholder={t('Immediately')}
+            onCommit={newValue => onPotChange({ accessAge: newValue })}
+          />
+        </Field>
+
+        <Field
+          width={POT_COLUMNS.remove}
+          truncate={false}
+          style={{ alignItems: 'center' }}
+        >
+          {canRemove && (
+            <Button
+              variant="bare"
+              aria-label={t('Remove pot')}
+              onPress={onRemove}
+              style={{ padding: 6 }}
+            >
+              <SvgDelete width={12} height={12} />
+            </Button>
+          )}
+        </Field>
+      </Row>
+    </GridListItem>
+  );
+}

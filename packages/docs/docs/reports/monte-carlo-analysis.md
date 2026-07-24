@@ -53,6 +53,8 @@ The configuration area at the top of the report is organized into three tabs.
 
 ### Investment Pots
 
+<!-- TODO screenshot: this image predates the table layout for pots - retake the Investment Pots tab screenshot once a preview deploy with the table view is available. -->
+
 ![The Investment Pots tab](/img/reports/monte-carlo-pots.png)
 
 A _pot_ is a chunk of invested money - a pension, a stocks-and-shares account, a savings account. You can model one pot or several, each with its own settings:

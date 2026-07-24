@@ -23,17 +23,17 @@ import { MonteCarloGraph } from '#components/reports/graphs/MonteCarloGraph';
 import type { MonteCarloGraphView } from '#components/reports/graphs/MonteCarloGraphTooltip';
 import { MonteCarloHistogram } from '#components/reports/graphs/MonteCarloHistogram';
 import { LoadingIndicator } from '#components/reports/LoadingIndicator';
-import { MonteCarloConfiguration } from '#components/reports/reports/MonteCarloConfiguration';
-import { HISTORICAL_ANNUAL_RETURNS } from '#components/reports/reports/monteCarloHistoricalReturns';
-import { MonteCarloRunDetailTable } from '#components/reports/reports/MonteCarloRunDetailTable';
-import { MonteCarloRunsTable } from '#components/reports/reports/MonteCarloRunsTable';
+import { MonteCarloConfiguration } from '#components/reports/reports/monte-carlo/MonteCarloConfiguration';
+import { HISTORICAL_ANNUAL_RETURNS } from '#components/reports/reports/monte-carlo/monteCarloHistoricalReturns';
+import { MonteCarloRunDetailTable } from '#components/reports/reports/monte-carlo/MonteCarloRunDetailTable';
+import { MonteCarloRunsTable } from '#components/reports/reports/monte-carlo/MonteCarloRunsTable';
 import {
   getMonteCarloHorizonYears,
   MONTE_CARLO_DEFAULTS,
   monteCarloConfigFromMeta,
   runMonteCarloSimulation,
-} from '#components/reports/reports/monteCarloSimulation';
-import type { MonteCarloConfig } from '#components/reports/reports/monteCarloSimulation';
+} from '#components/reports/reports/monte-carlo/monteCarloSimulation';
+import type { MonteCarloConfig } from '#components/reports/reports/monte-carlo/monteCarloSimulation';
 import { useDashboardWidget } from '#hooks/useDashboardWidget';
 import { useFormat } from '#hooks/useFormat';
 import { useNavigate } from '#hooks/useNavigate';
