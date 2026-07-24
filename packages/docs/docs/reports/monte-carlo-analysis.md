@@ -40,8 +40,6 @@ The configuration area at the top of the report is organized into three tabs.
 
 ### Plan Details
 
-<!-- TODO screenshot: this image predates the grouped layout (Your plan / Inflation / Simulation) - retake the Plan Details tab screenshot once a preview deploy with the groups is available. -->
-
 ![The Plan Details tab](/img/reports/monte-carlo-plan-details.png)
 
 The tab is organized into three small groups - **Your plan**, **Inflation** and **Simulation**:
@@ -77,8 +75,6 @@ The access age setting is what lets the report model the classic "bridge gap": r
 :::
 
 ### Spending
-
-<!-- TODO screenshot: this image predates the spending phases feature - retake the Spending tab screenshot (showing the phases list) once a preview deploy with spending phases is available. -->
 
 ![The Spending tab](/img/reports/monte-carlo-withdrawals.png)
 

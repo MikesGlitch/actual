@@ -113,124 +113,135 @@ export function MonteCarloSpendingPhases({
         </Tooltip>
       </View>
 
-      <View style={{ ...styles.tableContainer, flex: 'unset' }}>
-        <TableHeader>
-          <Field width="flex" style={{ minWidth: PHASE_COLUMNS.name }}>
-            <Trans>Phase name</Trans>
-          </Field>
-          <Field width="flex" style={{ minWidth: PHASE_COLUMNS.fromAge }}>
-            <Trans>From age</Trans>
-          </Field>
-          <Field width="flex" style={{ minWidth: PHASE_COLUMNS.until }}>
-            <Trans>Until</Trans>
-          </Field>
-          <Field width="flex" style={{ minWidth: PHASE_COLUMNS.spending }}>
-            <Trans>Yearly spending</Trans>
-          </Field>
-          <Field width={PHASE_COLUMNS.remove} />
-        </TableHeader>
+      <View
+        style={{
+          ...styles.tableContainer,
+          ...styles.horizontalScrollbar,
+          flex: 'unset',
+          // Scroll sideways when the columns' minimum widths don't fit,
+          // instead of clipping the end of the rows
+          overflowX: 'auto',
+        }}
+      >
+        <View style={{ minWidth: 'fit-content' }}>
+          <TableHeader>
+            <Field width="flex" style={{ minWidth: PHASE_COLUMNS.name }}>
+              <Trans>Phase name</Trans>
+            </Field>
+            <Field width="flex" style={{ minWidth: PHASE_COLUMNS.fromAge }}>
+              <Trans>From age</Trans>
+            </Field>
+            <Field width="flex" style={{ minWidth: PHASE_COLUMNS.until }}>
+              <Trans>Until</Trans>
+            </Field>
+            <Field width="flex" style={{ minWidth: PHASE_COLUMNS.spending }}>
+              <Trans>Yearly spending</Trans>
+            </Field>
+            <Field width={PHASE_COLUMNS.remove} />
+          </TableHeader>
 
-        {phases.map((phase, index) => {
-          const nextPhase = phases[index + 1];
-          return (
-            <Row
-              key={phase.id}
-              collapsed
-              height={PHASE_ROW_HEIGHT}
-              style={{
-                backgroundColor: theme.tableBackground,
-                ':hover': { backgroundColor: theme.tableRowBackgroundHover },
-              }}
-            >
-              <Field
-                width="flex"
-                style={{ minWidth: PHASE_COLUMNS.name }}
-                truncate={false}
+          {phases.map((phase, index) => {
+            const nextPhase = phases[index + 1];
+            return (
+              <Row
+                key={phase.id}
+                collapsed
+                height={PHASE_ROW_HEIGHT}
+                style={{
+                  backgroundColor: theme.tableBackground,
+                  ':hover': { backgroundColor: theme.tableRowBackgroundHover },
+                }}
               >
-                <Input
-                  // Uncontrolled on purpose: committing on blur keeps typing
-                  // snappy since every config change re-runs the simulation
-                  defaultValue={phase.name}
-                  placeholder={t('Phase {{number}}', { number: index + 1 })}
-                  onUpdate={newName => {
-                    if (newName !== phase.name) {
-                      updatePhase(phase.id, { name: newName });
-                    }
-                  }}
-                />
-              </Field>
+                <Field
+                  width="flex"
+                  style={{ minWidth: PHASE_COLUMNS.name }}
+                  truncate={false}
+                >
+                  <Input
+                    // Uncontrolled on purpose: committing on blur keeps typing
+                    // snappy since every config change re-runs the simulation
+                    defaultValue={phase.name}
+                    placeholder={t('Phase {{number}}', { number: index + 1 })}
+                    onUpdate={newName => {
+                      if (newName !== phase.name) {
+                        updatePhase(phase.id, { name: newName });
+                      }
+                    }}
+                  />
+                </Field>
 
-              <Field
-                width="flex"
-                style={{ minWidth: PHASE_COLUMNS.fromAge }}
-                truncate={false}
-              >
-                {index === 0 ? (
+                <Field
+                  width="flex"
+                  style={{ minWidth: PHASE_COLUMNS.fromAge }}
+                  truncate={false}
+                >
+                  {index === 0 ? (
+                    <Text style={{ color: theme.tableText }}>
+                      {t('Now ({{age}})', { age: currentAge })}
+                    </Text>
+                  ) : (
+                    <MonteCarloNumberInput
+                      value={phase.fromAge}
+                      roundToInteger
+                      min={currentAge + 1}
+                      max={targetAge}
+                      step={1}
+                      onCommit={newValue =>
+                        updatePhase(phase.id, {
+                          fromAge: newValue ?? currentAge + 1,
+                        })
+                      }
+                    />
+                  )}
+                </Field>
+
+                <Field
+                  width="flex"
+                  style={{ minWidth: PHASE_COLUMNS.until }}
+                  truncate={false}
+                >
                   <Text style={{ color: theme.tableText }}>
-                    {t('Now ({{age}})', { age: currentAge })}
+                    {nextPhase?.fromAge != null
+                      ? t('Age {{age}}', { age: nextPhase.fromAge - 1 })
+                      : t('Onwards')}
                   </Text>
-                ) : (
-                  <MonteCarloNumberInput
-                    value={phase.fromAge}
-                    roundToInteger
-                    min={currentAge + 1}
-                    max={targetAge}
-                    step={1}
-                    onCommit={newValue =>
+                </Field>
+
+                <Field
+                  width="flex"
+                  style={{ minWidth: PHASE_COLUMNS.spending }}
+                  truncate={false}
+                >
+                  <FinancialInput
+                    value={phase.annualWithdrawal}
+                    onUpdate={value =>
                       updatePhase(phase.id, {
-                        fromAge: newValue ?? currentAge + 1,
+                        annualWithdrawal: Math.max(0, value),
                       })
                     }
                   />
-                )}
-              </Field>
+                </Field>
 
-              <Field
-                width="flex"
-                style={{ minWidth: PHASE_COLUMNS.until }}
-                truncate={false}
-              >
-                <Text style={{ color: theme.tableText }}>
-                  {nextPhase?.fromAge != null
-                    ? t('Age {{age}}', { age: nextPhase.fromAge - 1 })
-                    : t('Onwards')}
-                </Text>
-              </Field>
-
-              <Field
-                width="flex"
-                style={{ minWidth: PHASE_COLUMNS.spending }}
-                truncate={false}
-              >
-                <FinancialInput
-                  value={phase.annualWithdrawal}
-                  onUpdate={value =>
-                    updatePhase(phase.id, {
-                      annualWithdrawal: Math.max(0, value),
-                    })
-                  }
-                />
-              </Field>
-
-              <Field
-                width={PHASE_COLUMNS.remove}
-                truncate={false}
-                style={{ alignItems: 'center' }}
-              >
-                {phases.length > 1 && (
-                  <Button
-                    variant="bare"
-                    aria-label={t('Remove phase')}
-                    onPress={() => removePhase(phase.id)}
-                    style={{ padding: 6 }}
-                  >
-                    <SvgDelete width={12} height={12} />
-                  </Button>
-                )}
-              </Field>
-            </Row>
-          );
-        })}
+                <Field
+                  width={PHASE_COLUMNS.remove}
+                  truncate={false}
+                  style={{ alignItems: 'center' }}
+                >
+                  {phases.length > 1 && (
+                    <Button
+                      variant="bare"
+                      aria-label={t('Remove phase')}
+                      onPress={() => removePhase(phase.id)}
+                      style={{ padding: 6 }}
+                    >
+                      <SvgDelete width={12} height={12} />
+                    </Button>
+                  )}
+                </Field>
+              </Row>
+            );
+          })}
+        </View>
       </View>
 
       <View style={{ flexDirection: 'row' }}>

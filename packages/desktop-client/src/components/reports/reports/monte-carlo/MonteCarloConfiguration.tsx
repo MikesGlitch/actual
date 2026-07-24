@@ -407,36 +407,47 @@ export function MonteCarloConfiguration({
           tab alongside these. */}
       {activeTab === 'pots' && (
         <View>
-          <View style={{ ...styles.tableContainer, flex: 'unset' }}>
-            <MonteCarloPotsTableHeader />
-            <GridList
-              aria-label={t('Investment pots')}
-              // Without this, typing in the pot fields moves the list
-              // highlight to whichever pot name matches the keystroke
-              disallowTypeAhead
-              // Let Tab move between the fields inside pot rows instead of
-              // jumping out of the list (default ARIA grid behavior)
-              keyboardNavigationBehavior="tab"
-              items={config.pots}
-              dependencies={[config, onConfigChange]}
-              dragAndDropHooks={dragAndDropHooks}
-            >
-              {pot => (
-                <MonteCarloPotConfiguration
-                  key={pot.id}
-                  pot={pot}
-                  potNumber={config.pots.indexOf(pot) + 1}
-                  canRemove={config.pots.length > 1}
-                  usesHistoricalReturns={config.returnModel !== 'normal'}
-                  onPotChange={changes => onPotChange(pot.id, changes)}
-                  onRemove={() =>
-                    onConfigChange({
-                      pots: config.pots.filter(other => other.id !== pot.id),
-                    })
-                  }
-                />
-              )}
-            </GridList>
+          <View
+            style={{
+              ...styles.tableContainer,
+              ...styles.horizontalScrollbar,
+              flex: 'unset',
+              // Scroll sideways when the columns' minimum widths don't fit,
+              // instead of clipping the end of the rows
+              overflowX: 'auto',
+            }}
+          >
+            <View style={{ minWidth: 'fit-content' }}>
+              <MonteCarloPotsTableHeader />
+              <GridList
+                aria-label={t('Investment pots')}
+                // Without this, typing in the pot fields moves the list
+                // highlight to whichever pot name matches the keystroke
+                disallowTypeAhead
+                // Let Tab move between the fields inside pot rows instead of
+                // jumping out of the list (default ARIA grid behavior)
+                keyboardNavigationBehavior="tab"
+                items={config.pots}
+                dependencies={[config, onConfigChange]}
+                dragAndDropHooks={dragAndDropHooks}
+              >
+                {pot => (
+                  <MonteCarloPotConfiguration
+                    key={pot.id}
+                    pot={pot}
+                    potNumber={config.pots.indexOf(pot) + 1}
+                    canRemove={config.pots.length > 1}
+                    usesHistoricalReturns={config.returnModel !== 'normal'}
+                    onPotChange={changes => onPotChange(pot.id, changes)}
+                    onRemove={() =>
+                      onConfigChange({
+                        pots: config.pots.filter(other => other.id !== pot.id),
+                      })
+                    }
+                  />
+                )}
+              </GridList>
+            </View>
           </View>
           <View style={{ flexDirection: 'row', marginTop: 10 }}>
             <Button
