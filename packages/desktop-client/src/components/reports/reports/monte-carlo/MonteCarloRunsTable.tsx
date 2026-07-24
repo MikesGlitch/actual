@@ -101,28 +101,6 @@ export function MonteCarloRunsTable({
             total: simulationCount,
           })}
         </Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <Text style={{ color: theme.pageText, marginRight: 4 }}>
-            <Trans>Jump to:</Trans>
-          </Text>
-          {(
-            [
-              [t('Worst'), 0],
-              [t('25th percentile'), 0.25],
-              [t('Median'), 0.5],
-              [t('75th percentile'), 0.75],
-              [t('Best'), 1],
-            ] as const
-          ).map(([label, percentile]) => (
-            <Button
-              key={label}
-              variant="menu"
-              onPress={() => jumpToPercentile(percentile)}
-            >
-              {label}
-            </Button>
-          ))}
-        </View>
         <Select
           value={sortOrder}
           onChange={value => {
@@ -239,33 +217,64 @@ export function MonteCarloRunsTable({
           </Button>
         );
       })}
-
       <View
         style={{
           flexDirection: 'row',
-          justifyContent: 'flex-end',
+          alignItems: 'center',
+          flexWrap: 'wrap',
           gap: 10,
           marginTop: 10,
+          width: '100%',
         }}
       >
-        <Button
-          isDisabled={currentPage === 0}
-          onPress={() => {
-            setPage(currentPage - 1);
-            setHighlightedRank(null);
+        <Select
+          // An action picker, not a setting: the value stays on the
+          // placeholder so it always reads "Jump to..." at rest
+          value=""
+          onChange={value => {
+            if (value !== '') {
+              jumpToPercentile(Number(value));
+            }
+          }}
+          options={[
+            ['', t('Jump to…')],
+            ['0', t('Worst run')],
+            ['0.25', t('25th percentile')],
+            ['0.5', t('Median run')],
+            ['0.75', t('75th percentile')],
+            ['1', t('Best run')],
+          ]}
+          style={{ width: 170 }}
+        />
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            // Stays pinned right, and drops to its own line when the jump
+            // links need the full width
+            marginLeft: 'auto',
           }}
         >
-          <Trans>Previous</Trans>
-        </Button>
-        <Button
-          isDisabled={currentPage >= pageCount - 1}
-          onPress={() => {
-            setPage(currentPage + 1);
-            setHighlightedRank(null);
-          }}
-        >
-          <Trans>Next</Trans>
-        </Button>
+          <Button
+            isDisabled={currentPage === 0}
+            onPress={() => {
+              setPage(currentPage - 1);
+              setHighlightedRank(null);
+            }}
+          >
+            <Trans>Previous</Trans>
+          </Button>
+          <Button
+            isDisabled={currentPage >= pageCount - 1}
+            onPress={() => {
+              setPage(currentPage + 1);
+              setHighlightedRank(null);
+            }}
+          >
+            <Trans>Next</Trans>
+          </Button>
+        </View>
       </View>
     </View>
   );
